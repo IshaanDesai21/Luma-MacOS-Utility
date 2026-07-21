@@ -1,0 +1,16 @@
+# Build output
+build/
+DerivedData/
+*.dmg
+*.app
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+
+# macOS
+.DS_Store
