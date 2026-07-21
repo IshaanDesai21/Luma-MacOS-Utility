@@ -40,16 +40,18 @@ struct DynamicIslandView: View {
 
     private var island: some View {
         let layout = layout
-        let shape = RoundedRectangle(cornerRadius: layout.cornerRadius, style: .continuous)
+        let shape = islandShape(cornerRadius: layout.cornerRadius)
         let expanded = presentation == .expanded
         let tucked = forcedPresentation == nil && model.isTuckedAway
+        // Notch style is always solid black so it fuses with the real notch.
+        let solidBlack = settings.islandSolidBlack || model.isNotchStyle
 
         return contentLayers
             // Solid black content sits on black; force light-on-dark styling.
-            .environment(\.colorScheme, settings.islandSolidBlack ? .dark : contentColorScheme)
+            .environment(\.colorScheme, solidBlack ? .dark : contentColorScheme)
             .frame(width: layout.width, height: layout.height)
             .background {
-                if settings.islandSolidBlack {
+                if solidBlack {
                     shape.fill(.black)
                 } else {
                     LiquidGlassSurface(shape: shape, level: settings.glassLevel)
@@ -65,11 +67,11 @@ struct DynamicIslandView: View {
                         startPoint: .top, endPoint: .bottom
                     )
                 )
-                .opacity(settings.islandSolidBlack ? 0 : 0.55 * settings.glassLevel)
+                .opacity(solidBlack ? 0 : 0.55 * settings.glassLevel)
                 .allowsHitTesting(false)
             }
             .overlay {
-                shape.stroke(.white.opacity(settings.islandSolidBlack ? 0.12 : 0.16), lineWidth: 0.8)
+                shape.stroke(.white.opacity(solidBlack ? 0.10 : 0.16), lineWidth: 0.8)
                     .allowsHitTesting(false)
             }
             .shadow(
@@ -125,23 +127,44 @@ struct DynamicIslandView: View {
         }
     }
 
+    /// Floating style is a full rounded rectangle; notch style has a flat top
+    /// (merging with the physical notch) and rounded bottom corners only.
+    private func islandShape(cornerRadius: CGFloat) -> AnyShape {
+        if model.isNotchStyle {
+            return AnyShape(UnevenRoundedRectangle(
+                topLeadingRadius: 0,
+                bottomLeadingRadius: cornerRadius,
+                bottomTrailingRadius: cornerRadius,
+                topTrailingRadius: 0,
+                style: .continuous
+            ))
+        }
+        return AnyShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+
     /// Both states, each laid out at its own natural size and crossfaded, so
     /// content never reflows while the glass container resizes over it.
     private var contentLayers: some View {
         ZStack {
-            peekContent
-                .frame(
-                    width: model.layout(for: .peek).width,
-                    height: model.layout(for: .peek).height
-                )
-                .opacity(presentation == .peek ? 1 : 0)
+            // In notch style the resting tab is an empty black notch (nothing to
+            // show — the physical notch sits over it).
+            if !model.isNotchStyle {
+                peekContent
+                    .frame(
+                        width: model.layout(for: .peek).width,
+                        height: model.layout(for: .peek).height
+                    )
+                    .opacity(presentation == .peek ? 1 : 0)
+            }
             hudContent
+                .padding(.top, model.notchClearance)
                 .frame(
                     width: model.layout(for: .hud).width,
                     height: model.layout(for: .hud).height
                 )
                 .opacity(presentation == .hud ? 1 : 0)
             expandedContent
+                .padding(.top, model.notchClearance)
                 .frame(
                     width: model.layout(for: .expanded).width,
                     height: model.layout(for: .expanded).height
@@ -289,9 +312,40 @@ struct DynamicIslandView: View {
     private var mediaAndShelf: some View {
         VStack(spacing: 8) {
             mediaRow
+            if settings.islandQuickSliders {
+                quickSliders
+            }
             if settings.islandFileShelf && !model.shelf.items.isEmpty {
                 shelfStrip
             }
+        }
+    }
+
+    private var quickSliders: some View {
+        VStack(spacing: 6) {
+            sliderRow(
+                icon: "speaker.wave.2.fill",
+                value: Double(model.audio.volume),
+                set: { model.audio.setVolume(Float($0)) }
+            )
+            if model.brightness.isAvailable {
+                sliderRow(
+                    icon: "sun.max.fill",
+                    value: Double(model.brightness.brightness),
+                    set: { model.brightness.setBrightness(Float($0)) }
+                )
+            }
+        }
+    }
+
+    private func sliderRow(icon: String, value: Double, set: @escaping (Double) -> Void) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            Slider(value: Binding(get: { value }, set: { set($0) }), in: 0...1)
+                .controlSize(.mini)
         }
     }
 

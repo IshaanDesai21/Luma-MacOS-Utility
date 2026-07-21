@@ -56,9 +56,35 @@ struct DynamicIslandPageView: View {
             Toggle("Enable Dynamic Island", isOn: $settings.islandEnabled)
                 .padding(16)
             Divider().padding(.leading, 16)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Picker("Style", selection: $settings.islandStyle) {
+                    ForEach(AppSettings.IslandStyle.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                Text(settings.islandStyle == .notch
+                     ? "Fuses with the real notch (best on notched MacBooks), boringNotch style."
+                     : "A floating glass pod that hangs below the notch or top edge.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(16)
+            .disabled(!settings.islandEnabled)
+
+            Divider().padding(.leading, 16)
             Toggle("Reveal on hover", isOn: $settings.islandRevealOnHover)
                 .padding(16)
                 .disabled(!settings.islandEnabled)
+            Divider().padding(.leading, 16)
+            Toggle(isOn: $settings.islandQuickSliders) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Volume & brightness sliders")
+                    Text("Adds draggable sliders to the expanded card.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+            }
+            .padding(16)
+            .disabled(!settings.islandEnabled)
         }
         .background(settings.glassMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }

@@ -62,14 +62,25 @@ final class WindowManager {
         let screens = NSScreen.screens
         guard !screens.isEmpty else { return }
 
+        let notchStyle = model.settings.islandStyle == .notch
+
+        // Publish the notch dimensions from the notched display (used by the
+        // "part of the notch" style so the tab matches it exactly).
+        if let notched = screens.first(where: { $0.safeAreaInsets.top > 0 }) {
+            model.notchSize = Self.notchSize(for: notched)
+        } else {
+            model.notchSize = .zero
+        }
+
         // The island's position inside the canvas is shared by every panel;
         // per-screen differences (notch vs none) are absorbed by each panel's
-        // y-origin below.
-        let referenceInset = screens.map { Self.baseInset(for: $0) }.max() ?? 32
+        // y-origin below. In notch style the island is flush with the very top.
+        let referenceInset = notchStyle ? 0 : (screens.map { Self.baseInset(for: $0) }.max() ?? 32)
         model.topInset = max(referenceInset - CGFloat(model.settings.islandVerticalOffset), 0)
 
         for screen in screens {
-            let inset = max(Self.baseInset(for: screen) - CGFloat(model.settings.islandVerticalOffset), 0)
+            let baseInset = notchStyle ? 0 : Self.baseInset(for: screen)
+            let inset = max(baseInset - CGFloat(model.settings.islandVerticalOffset), 0)
             let panel = makePanel()
             let container = makeContainer(model: model)
             panel.contentView = container
@@ -122,6 +133,9 @@ final class WindowManager {
             .environment(model)
             .environment(model.player)
             .environment(model.settings)
+            // Pin the rendering to "active" so glass/material never shifts when
+            // the panel becomes or resigns the key window (click vs idle).
+            .environment(\.controlActiveState, .active)
             .ignoresSafeArea()
         let host = NSHostingView(rootView: AnyView(root))
         host.sizingOptions = []
@@ -293,6 +307,7 @@ final class WindowManager {
         withObservationTracking { [weak self] in
             _ = self?.model?.settings.islandHorizontalOffset
             _ = self?.model?.settings.islandVerticalOffset
+            _ = self?.model?.settings.islandStyle
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.rebuildPanels()
@@ -306,6 +321,17 @@ final class WindowManager {
     /// Below the notch on notched displays; just under the top edge otherwise.
     private static func baseInset(for screen: NSScreen) -> CGFloat {
         screen.safeAreaInsets.top > 0 ? screen.safeAreaInsets.top : 4
+    }
+
+    /// The physical notch's size, or `.zero` if the display has none.
+    private static func notchSize(for screen: NSScreen) -> CGSize {
+        let top = screen.safeAreaInsets.top
+        guard top > 0 else { return .zero }
+        let left = screen.auxiliaryTopLeftArea?.width ?? 0
+        let right = screen.auxiliaryTopRightArea?.width ?? 0
+        guard left > 0, right > 0 else { return CGSize(width: 200, height: top) }
+        let width = max(screen.frame.width - left - right, 0)
+        return CGSize(width: width, height: top)
     }
 
     deinit {

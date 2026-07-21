@@ -1,5 +1,6 @@
 import SwiftUI
 import Observation
+import ApplicationServices
 
 /// Root object that owns the app's shared services, modules, and managers.
 @MainActor
@@ -101,7 +102,14 @@ final class AppModel {
     }
 
     private func observeMediaKeySetting() {
-        mediaKeyInterceptor?.setEnabled(settings.islandSystemHUD && settings.islandEnabled)
+        let wanted = settings.islandSystemHUD && settings.islandEnabled
+        // Consuming the volume/brightness keys (which hides the native bezel)
+        // requires Accessibility; prompt for it the first time it's turned on.
+        if wanted && !AXIsProcessTrusted() {
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
+        }
+        mediaKeyInterceptor?.setEnabled(wanted)
         withObservationTracking {
             _ = settings.islandSystemHUD
             _ = settings.islandEnabled

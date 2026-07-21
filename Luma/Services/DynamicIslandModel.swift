@@ -37,6 +37,18 @@ final class DynamicIslandModel {
     /// (below the notch on notched Macs). Set by the window manager.
     var topInset: CGFloat = 32
 
+    /// Physical notch size of the active display (`.zero` on notchless Macs).
+    /// Used by the "part of the notch" style so the island fuses with the notch.
+    var notchSize: CGSize = .zero
+
+    var isNotchStyle: Bool { settings.islandStyle == .notch }
+
+    /// Height taken up by the notch, so notch-style content clears it.
+    var notchClearance: CGFloat {
+        guard isNotchStyle else { return 0 }
+        return notchSize.height > 0 ? notchSize.height : 34
+    }
+
     @ObservationIgnored private var dropResetTask: Task<Void, Never>?
     @ObservationIgnored private var unlockResetTask: Task<Void, Never>?
     @ObservationIgnored private var unlockObserver: NSObjectProtocol?
@@ -170,6 +182,8 @@ final class DynamicIslandModel {
 
     func layout(for presentation: Presentation) -> IslandLayout {
         let scale = CGFloat(settings.islandScale)
+        if isNotchStyle { return notchLayout(for: presentation, scale: scale) }
+
         switch presentation {
         case .peek:
             // A small pod: corner radius is exactly half the height, so the
@@ -183,6 +197,25 @@ final class DynamicIslandModel {
         case .expanded:
             let tall = settings.islandFileShelf && (isDropTargeting || !shelf.items.isEmpty)
             return IslandLayout(width: 368 * scale, height: (tall ? 112 : 78) * scale, cornerRadius: 30 * scale)
+        }
+    }
+
+    /// boringNotch-style geometry: at rest the tab matches the physical notch
+    /// exactly (so it disappears into it); everything grows downward from a flat
+    /// top with rounded bottom corners.
+    private func notchLayout(for presentation: Presentation, scale: CGFloat) -> IslandLayout {
+        let nW = notchSize.width > 0 ? notchSize.width : 200
+        let nH = notchSize.height > 0 ? notchSize.height : 34
+        switch presentation {
+        case .peek:
+            // Exactly the notch — never scaled — so it blends seamlessly.
+            return IslandLayout(width: nW, height: nH, cornerRadius: 8)
+        case .hud:
+            return IslandLayout(width: max(nW + 150, 300) * scale, height: nH + 26, cornerRadius: 20)
+        case .expanded:
+            let tall = settings.islandFileShelf && (isDropTargeting || !shelf.items.isEmpty)
+            let content: CGFloat = tall ? 118 : 84
+            return IslandLayout(width: max(nW + 240, 380) * scale, height: nH + content, cornerRadius: 24)
         }
     }
 

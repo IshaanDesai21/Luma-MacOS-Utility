@@ -140,6 +140,32 @@ final class AppSettings {
         didSet { defaults.set(hasCompletedOnboarding, forKey: Keys.hasCompletedOnboarding) }
     }
 
+    /// How the island sits on screen.
+    enum IslandStyle: String, CaseIterable, Identifiable {
+        /// A floating glass pod below the notch.
+        case floating
+        /// Seamlessly attached to the physical notch, boringNotch style: solid
+        /// black, flat top, notch width, so it reads as the notch itself.
+        case notch
+
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .floating: return "Floating pod"
+            case .notch: return "Part of the notch"
+            }
+        }
+    }
+
+    var islandStyle: IslandStyle {
+        didSet { defaults.set(islandStyle.rawValue, forKey: Keys.islandStyle) }
+    }
+
+    /// Volume + brightness sliders inside the expanded card.
+    var islandQuickSliders: Bool {
+        didSet { defaults.set(islandQuickSliders, forKey: Keys.islandQuickSliders) }
+    }
+
     /// Solid black island (classic iPhone look) instead of Liquid Glass.
     var islandSolidBlack: Bool {
         didSet { defaults.set(islandSolidBlack, forKey: Keys.islandSolidBlack) }
@@ -239,6 +265,8 @@ final class AppSettings {
         static let islandLowBatteryAlert = "island.lowBatteryAlert"
         static let hasCompletedOnboarding = "app.hasCompletedOnboarding"
         static let islandSolidBlack = "island.solidBlack"
+        static let islandStyle = "island.style"
+        static let islandQuickSliders = "island.quickSliders"
         static let islandSystemHUD = "island.systemHUD"
         static let islandDownloadProgress = "island.downloadProgress"
         static let islandHiddenUntilHover = "island.hiddenUntilHover"
@@ -308,6 +336,8 @@ final class AppSettings {
         islandLowBatteryAlert = flag(Keys.islandLowBatteryAlert, default: true)
         hasCompletedOnboarding = defaults.bool(forKey: Keys.hasCompletedOnboarding)
         islandSolidBlack = flag(Keys.islandSolidBlack, default: false)
+        islandStyle = IslandStyle(rawValue: defaults.string(forKey: Keys.islandStyle) ?? "") ?? .floating
+        islandQuickSliders = flag(Keys.islandQuickSliders, default: true)
         islandSystemHUD = flag(Keys.islandSystemHUD, default: true)
         islandDownloadProgress = flag(Keys.islandDownloadProgress, default: true)
         islandHiddenUntilHover = flag(Keys.islandHiddenUntilHover, default: false)
