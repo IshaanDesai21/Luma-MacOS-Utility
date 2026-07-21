@@ -17,6 +17,7 @@ struct DynamicIslandView: View {
 
     var forcedPresentation: DynamicIslandModel.Presentation?
 
+    @Environment(\.colorScheme) private var contentColorScheme
     @State private var pulsing = false
 
     private var presentation: DynamicIslandModel.Presentation {
@@ -42,24 +43,31 @@ struct DynamicIslandView: View {
         let expanded = presentation == .expanded
 
         return contentLayers
+            // Solid black content sits on black; force light-on-dark styling.
+            .environment(\.colorScheme, settings.islandSolidBlack ? .dark : contentColorScheme)
             .frame(width: layout.width, height: layout.height)
             .background {
-                LiquidGlassSurface(shape: shape, level: settings.glassLevel)
+                if settings.islandSolidBlack {
+                    shape.fill(.black)
+                } else {
+                    LiquidGlassSurface(shape: shape, level: settings.glassLevel)
+                }
             }
             .clipShape(shape)
             .overlay {
-                // Gentle top sheen so the glass reads as glass.
+                // Top sheen scales with the frost level, so the "Liquid" end of
+                // the slider stays truly water-clear. None on solid black.
                 shape.fill(
                     LinearGradient(
                         colors: [.white.opacity(0.22), .white.opacity(0.03), .clear],
                         startPoint: .top, endPoint: .bottom
                     )
                 )
-                .opacity(0.5)
+                .opacity(settings.islandSolidBlack ? 0 : 0.1 + 0.5 * settings.glassLevel)
                 .allowsHitTesting(false)
             }
             .overlay {
-                shape.stroke(.white.opacity(0.16), lineWidth: 0.8)
+                shape.stroke(.white.opacity(settings.islandSolidBlack ? 0.12 : 0.16), lineWidth: 0.8)
                     .allowsHitTesting(false)
             }
             .shadow(

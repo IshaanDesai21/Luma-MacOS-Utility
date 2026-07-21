@@ -140,6 +140,11 @@ final class AppSettings {
         didSet { defaults.set(hasCompletedOnboarding, forKey: Keys.hasCompletedOnboarding) }
     }
 
+    /// Solid black island (classic iPhone look) instead of Liquid Glass.
+    var islandSolidBlack: Bool {
+        didSet { defaults.set(islandSolidBlack, forKey: Keys.islandSolidBlack) }
+    }
+
     var islandShowWhilePlaying: Bool {
         didSet { defaults.set(islandShowWhilePlaying, forKey: Keys.islandShowWhilePlaying) }
     }
@@ -213,6 +218,7 @@ final class AppSettings {
         static let islandClickPlayPause = "island.clickPlayPause"
         static let islandLowBatteryAlert = "island.lowBatteryAlert"
         static let hasCompletedOnboarding = "app.hasCompletedOnboarding"
+        static let islandSolidBlack = "island.solidBlack"
         static let launchOnSettings = "app.launchOnSettings"
         static let dockClickToHide = "dock.clickToHide"
         static let islandHideShortcut = "shortcut.islandHide"
@@ -277,6 +283,7 @@ final class AppSettings {
         islandClickPlayPause = flag(Keys.islandClickPlayPause, default: true)
         islandLowBatteryAlert = flag(Keys.islandLowBatteryAlert, default: true)
         hasCompletedOnboarding = defaults.bool(forKey: Keys.hasCompletedOnboarding)
+        islandSolidBlack = flag(Keys.islandSolidBlack, default: false)
         launchOnSettings = defaults.bool(forKey: Keys.launchOnSettings)
         dockClickToHide = defaults.bool(forKey: Keys.dockClickToHide)
         islandHideShortcut = Self.loadShortcut(defaults, Keys.islandHideShortcut)

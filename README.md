@@ -24,6 +24,7 @@ taste:
 - **Click to play / pause** — tap the pod to toggle playback
 - **Unlock animation** — padlock-open flash when your Mac unlocks
 - **Pulse on track change** — the pod bounces when the song changes
+- **Solid black mode** — classic iPhone-style pure-black island instead of glass
 - Sliders for **position** (vertical + horizontal), **size**, and the
   **activation area** (how close the cursor must get before it opens)
 - Hold **⌥ Option** over the island to hide it and click through

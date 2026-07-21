@@ -214,6 +214,13 @@ struct DynamicIslandPageView: View {
                 subtitle: "A pulsing red battery in the pod under 15% when unplugged.",
                 isOn: $settings.islandLowBatteryAlert
             )
+            Divider().padding(.leading, 52)
+            featureRow(
+                icon: "circle.fill",
+                title: "Solid black island",
+                subtitle: "Classic iPhone look — pure black instead of Liquid Glass.",
+                isOn: $settings.islandSolidBlack
+            )
         }
         .background(settings.glassMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }

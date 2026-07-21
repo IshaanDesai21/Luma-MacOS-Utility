@@ -24,17 +24,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select newest Xcode
+      - name: Select newest stable Xcode
         run: |
-          XCODE="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          # Prefer the newest NON-beta Xcode; fall back to anything named Xcode*.
+          XCODE="$(ls -d /Applications/Xcode*.app | grep -vi beta | sort -V | tail -1)"
+          [ -n "$XCODE" ] || XCODE="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
           echo "Using $XCODE"
           sudo xcode-select -switch "$XCODE"
+          sudo xcodebuild -runFirstLaunch || true
           xcodebuild -version
+          xcodebuild -showsdks | grep macosx || true
 
       - name: Build DMG + app zip
         run: |
+          set -o pipefail
           chmod +x scripts/build-dmg.sh
-          ./scripts/build-dmg.sh
+          ./scripts/build-dmg.sh 2>&1 | tee build-output.log
+
+      - name: Show build errors
+        if: failure()
+        run: |
+          echo "──── xcodebuild errors ────"
+          grep -E "(error|FAILED|failed)" build-output.log | head -60 || true
+
+      - name: Upload build log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build-output.log
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
