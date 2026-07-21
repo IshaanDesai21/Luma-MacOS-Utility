@@ -1,9 +1,11 @@
 import SwiftUI
+import AppKit
 
 /// Sidebar page that previews the overlay, configures behaviour, and lists the
 /// feature roadmap.
 struct DynamicIslandPageView: View {
     @Environment(AppSettings.self) private var settings
+    @Environment(AppModel.self) private var appModel
 
     var body: some View {
         @Bindable var settings = settings
@@ -75,16 +77,6 @@ struct DynamicIslandPageView: View {
             Toggle("Reveal on hover", isOn: $settings.islandRevealOnHover)
                 .padding(16)
                 .disabled(!settings.islandEnabled)
-            Divider().padding(.leading, 16)
-            Toggle(isOn: $settings.islandQuickSliders) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Volume & brightness sliders")
-                    Text("Adds draggable sliders to the expanded card.")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-            }
-            .padding(16)
-            .disabled(!settings.islandEnabled)
         }
         .background(settings.glassMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
@@ -267,6 +259,26 @@ struct DynamicIslandPageView: View {
                 subtitle: "Volume and brightness keys show a sleek readout in the island instead of the macOS bezel.",
                 isOn: $settings.islandSystemHUD
             )
+            if settings.islandSystemHUD, appModel.mediaKeyInterceptor?.isActive != true {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.system(size: 11))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("macOS will keep showing its own overlay until Luma has Accessibility permission. If you rebuilt or updated the app, remove the old Luma entry there and add it again.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Button("Open Accessibility Settings") {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+            }
             Divider().padding(.leading, 52)
             featureRow(
                 icon: "arrow.down.circle",

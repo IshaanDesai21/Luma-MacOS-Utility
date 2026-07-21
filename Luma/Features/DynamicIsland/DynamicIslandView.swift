@@ -312,40 +312,9 @@ struct DynamicIslandView: View {
     private var mediaAndShelf: some View {
         VStack(spacing: 8) {
             mediaRow
-            if settings.islandQuickSliders {
-                quickSliders
-            }
             if settings.islandFileShelf && !model.shelf.items.isEmpty {
                 shelfStrip
             }
-        }
-    }
-
-    private var quickSliders: some View {
-        VStack(spacing: 6) {
-            sliderRow(
-                icon: "speaker.wave.2.fill",
-                value: Double(model.audio.volume),
-                set: { model.audio.setVolume(Float($0)) }
-            )
-            if model.brightness.isAvailable {
-                sliderRow(
-                    icon: "sun.max.fill",
-                    value: Double(model.brightness.brightness),
-                    set: { model.brightness.setBrightness(Float($0)) }
-                )
-            }
-        }
-    }
-
-    private func sliderRow(icon: String, value: Double, set: @escaping (Double) -> Void) -> some View {
-        HStack(spacing: 9) {
-            Image(systemName: icon)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
-            Slider(value: Binding(get: { value }, set: { set($0) }), in: 0...1)
-                .controlSize(.mini)
         }
     }
 

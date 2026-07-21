@@ -107,25 +107,50 @@ final class MemoryModule: ModuleObject, Module {
             }
         }
 
-        private func row(_ process: ProcessMemoryReader.Process, maxBytes: Int64) -> some View {
-            VStack(spacing: 3) {
-                HStack {
-                    Text(process.name)
+        private func row(_ process: ProcessMemoryReader.Entry, maxBytes: Int64) -> some View {
+            HStack(spacing: 8) {
+                Group {
+                    if let icon = reader.icon(for: process) {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .frame(width: 18, height: 18)
+                    } else {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 18, height: 18)
+                    }
+                }
+
+                VStack(spacing: 3) {
+                    HStack {
+                        Text(process.name)
+                            .font(.system(size: 12))
+                            .lineLimit(1)
+                        Spacer()
+                        Text(memoryText(process.megabytes))
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    GeometryReader { geo in
+                        Capsule()
+                            .fill(.tint)
+                            .frame(width: geo.size.width * barFraction(process.residentBytes, maxBytes: maxBytes))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 4)
+                }
+
+                Button {
+                    reader.terminate(process)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 12))
-                        .lineLimit(1)
-                    Spacer()
-                    Text(memoryText(process.megabytes))
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
-                GeometryReader { geo in
-                    Capsule()
-                        .fill(.tint)
-                        .frame(width: geo.size.width * barFraction(process.residentBytes, maxBytes: maxBytes))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(height: 4)
+                .buttonStyle(.plain)
+                .help("Quit \(process.name)")
             }
         }
 

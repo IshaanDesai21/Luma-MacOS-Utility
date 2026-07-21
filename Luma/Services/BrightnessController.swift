@@ -47,6 +47,37 @@ final class BrightnessController {
     func setBrightness(_ value: Float) {
         let clamped = min(max(value, 0), 1)
         brightness = clamped
+        lastObserved = clamped
         _ = setFn?(CGMainDisplayID(), clamped)
+    }
+
+    // MARK: - Change observation
+
+    @ObservationIgnored private var observeTask: Task<Void, Never>?
+    @ObservationIgnored private var lastObserved: Float = -1
+    @ObservationIgnored private var changeHandler: (@MainActor () -> Void)?
+
+    /// Reports brightness changes from anywhere (keys, Control Center, auto
+    /// brightness) by polling the display, so the island can pop its readout
+    /// even when key interception isn't available.
+    func startObservingSystemChanges(_ handler: @escaping @MainActor () -> Void) {
+        changeHandler = handler
+        guard observeTask == nil, isAvailable else { return }
+        lastObserved = brightness
+        observeTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(400))
+                self?.checkForChange()
+            }
+        }
+    }
+
+    private func checkForChange() {
+        refresh()
+        if lastObserved < 0 { lastObserved = brightness }
+        if abs(brightness - lastObserved) > 0.004 {
+            lastObserved = brightness
+            changeHandler?()
+        }
     }
 }

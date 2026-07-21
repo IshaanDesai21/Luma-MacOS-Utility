@@ -120,6 +120,9 @@ final class WindowManager {
         panel.hasShadow = false
         panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = false
+        // Never take key focus for plain clicks (buttons/sliders work without
+        // it) — becoming key was re-rendering the glass in a "focused" style.
+        panel.becomesKeyOnlyIfNeeded = true
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         return panel
     }

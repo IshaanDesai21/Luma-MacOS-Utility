@@ -161,11 +161,6 @@ final class AppSettings {
         didSet { defaults.set(islandStyle.rawValue, forKey: Keys.islandStyle) }
     }
 
-    /// Volume + brightness sliders inside the expanded card.
-    var islandQuickSliders: Bool {
-        didSet { defaults.set(islandQuickSliders, forKey: Keys.islandQuickSliders) }
-    }
-
     /// Solid black island (classic iPhone look) instead of Liquid Glass.
     var islandSolidBlack: Bool {
         didSet { defaults.set(islandSolidBlack, forKey: Keys.islandSolidBlack) }
@@ -266,7 +261,6 @@ final class AppSettings {
         static let hasCompletedOnboarding = "app.hasCompletedOnboarding"
         static let islandSolidBlack = "island.solidBlack"
         static let islandStyle = "island.style"
-        static let islandQuickSliders = "island.quickSliders"
         static let islandSystemHUD = "island.systemHUD"
         static let islandDownloadProgress = "island.downloadProgress"
         static let islandHiddenUntilHover = "island.hiddenUntilHover"
@@ -337,7 +331,6 @@ final class AppSettings {
         hasCompletedOnboarding = defaults.bool(forKey: Keys.hasCompletedOnboarding)
         islandSolidBlack = flag(Keys.islandSolidBlack, default: false)
         islandStyle = IslandStyle(rawValue: defaults.string(forKey: Keys.islandStyle) ?? "") ?? .floating
-        islandQuickSliders = flag(Keys.islandQuickSliders, default: true)
         islandSystemHUD = flag(Keys.islandSystemHUD, default: true)
         islandDownloadProgress = flag(Keys.islandDownloadProgress, default: true)
         islandHiddenUntilHover = flag(Keys.islandHiddenUntilHover, default: false)

@@ -8,16 +8,20 @@ import Observation
 /// can't be made (e.g. brightness on some external displays), the key passes
 /// through untouched so nothing ever breaks.
 @MainActor
+@Observable
 final class MediaKeyInterceptor {
-    private let settings: AppSettings
-    private let audio: AudioController
-    private let brightness: BrightnessController
-    private let onVolume: () -> Void
-    private let onBrightness: () -> Void
+    /// True while the key tap is installed (macOS bezel suppressed).
+    private(set) var isActive = false
 
-    private var tap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
-    private var retryTask: Task<Void, Never>?
+    @ObservationIgnored private let settings: AppSettings
+    @ObservationIgnored private let audio: AudioController
+    @ObservationIgnored private let brightness: BrightnessController
+    @ObservationIgnored private let onVolume: () -> Void
+    @ObservationIgnored private let onBrightness: () -> Void
+
+    @ObservationIgnored private var tap: CFMachPort?
+    @ObservationIgnored private var runLoopSource: CFRunLoopSource?
+    @ObservationIgnored private var retryTask: Task<Void, Never>?
 
     // NX_SYSDEFINED media-key codes.
     private static let systemDefinedType: UInt32 = 14
@@ -66,6 +70,7 @@ final class MediaKeyInterceptor {
         }
         runLoopSource = nil
         tap = nil
+        isActive = false
     }
 
     private func installTap() -> Bool {
@@ -89,6 +94,7 @@ final class MediaKeyInterceptor {
         runLoopSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
+        isActive = true
         return true
     }
 

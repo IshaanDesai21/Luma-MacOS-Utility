@@ -38,7 +38,6 @@ taste:
   seamlessly with the physical notch (boringNotch style) on notched MacBooks
 - **System overlay replacement** — any volume or brightness change makes a
   sleek readout pop out of the notch instead of the macOS bezel
-- **Volume & brightness sliders** in the expanded card
 - **Artwork glow** — a soft halo around the island tinted from the album art,
   with a slider for how strong it glows
 - **Download indicator** — a blue pulse in the pod while files are downloading
@@ -72,7 +71,8 @@ A modular strip you design yourself:
   icon switches keyboard layout instantly (with a HUD)
 - **Collapse mode** — everything behind one Luma icon and a glass popover
 - **Detailed popovers** — click Memory for a live top-processes breakdown with
-  per-app usage bars; the calendar opens a full month view; and more
+  app icons, per-app usage bars, and one-click quit; the calendar opens a full
+  month view; and more
 - 13 modules: Clock · Calendar · Timer · Spotify · Microphone · Keyboard ·
   File Shelf · Battery · CPU · Memory · Network · Downloads · Clipboard
 

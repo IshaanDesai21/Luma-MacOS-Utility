@@ -18,7 +18,7 @@ final class AppModel {
     @ObservationIgnored let dynamicIslandManager: DynamicIslandManager
     @ObservationIgnored let dockClickWatcher = DockClickWatcher()
     @ObservationIgnored let nowPlaying: NowPlayingService
-    @ObservationIgnored private var mediaKeyInterceptor: MediaKeyInterceptor?
+    @ObservationIgnored private(set) var mediaKeyInterceptor: MediaKeyInterceptor?
 
     var islandModel: DynamicIslandModel { dynamicIslandManager.model }
 
@@ -85,6 +85,11 @@ final class AppModel {
         moduleServices.audio.startObservingSystemChanges { [weak self] in
             guard let self, self.settings.islandSystemHUD, self.settings.islandEnabled else { return }
             self.islandModel.flashVolume()
+        }
+        // Same for brightness, regardless of how it was changed.
+        moduleServices.brightness.startObservingSystemChanges { [weak self] in
+            guard let self, self.settings.islandSystemHUD, self.settings.islandEnabled else { return }
+            self.islandModel.flashBrightness()
         }
     }
 
