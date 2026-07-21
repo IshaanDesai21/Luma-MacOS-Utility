@@ -30,18 +30,18 @@ context.scaleBy(x: scale, y: scale)
 
 let bounds = NSRect(origin: .zero, size: pointSize)
 
-// Background: deep night gradient.
+// Background: off-white with the faintest lavender wash at the top.
 let gradient = NSGradient(colors: [
-    NSColor(calibratedRed: 0.09, green: 0.09, blue: 0.14, alpha: 1),
-    NSColor(calibratedRed: 0.05, green: 0.05, blue: 0.09, alpha: 1),
-    NSColor(calibratedRed: 0.02, green: 0.02, blue: 0.04, alpha: 1)
+    NSColor(calibratedRed: 0.955, green: 0.948, blue: 0.972, alpha: 1),
+    NSColor(calibratedRed: 0.965, green: 0.962, blue: 0.968, alpha: 1),
+    NSColor(calibratedRed: 0.975, green: 0.974, blue: 0.970, alpha: 1)
 ])
 gradient?.draw(in: bounds, angle: -90)
 
-// Soft glow behind the title (oval so there is no hard edge).
+// Whisper of purple behind the title (oval so there is no hard edge).
 let glow = NSGradient(
-    starting: NSColor(calibratedRed: 0.45, green: 0.35, blue: 0.9, alpha: 0.22),
-    ending: NSColor(calibratedRed: 0.45, green: 0.35, blue: 0.9, alpha: 0)
+    starting: NSColor(calibratedRed: 0.55, green: 0.45, blue: 0.9, alpha: 0.08),
+    ending: NSColor(calibratedRed: 0.55, green: 0.45, blue: 0.9, alpha: 0)
 )
 let glowPath = NSBezierPath(ovalIn: NSRect(x: 80, y: 220, width: 500, height: 230))
 glow?.draw(in: glowPath, relativeCenterPosition: .zero)
@@ -52,21 +52,21 @@ title.draw(
     at: NSPoint(x: 330 - 62, y: 318),
     withAttributes: [
         .font: NSFont.systemFont(ofSize: 44, weight: .bold),
-        .foregroundColor: NSColor.white
+        .foregroundColor: NSColor(calibratedWhite: 0.13, alpha: 1)
     ]
 )
 
 // Subtitle.
 let subtitleAttributes: [NSAttributedString.Key: Any] = [
     .font: NSFont.systemFont(ofSize: 15, weight: .medium),
-    .foregroundColor: NSColor.white.withAlphaComponent(0.55)
+    .foregroundColor: NSColor(calibratedWhite: 0.35, alpha: 1)
 ]
 let subtitle = "Drag Luma into Applications to install" as NSString
 let subtitleWidth = subtitle.size(withAttributes: subtitleAttributes).width
 subtitle.draw(at: NSPoint(x: 330 - subtitleWidth / 2, y: 292), withAttributes: subtitleAttributes)
 
 // Arrow between the icon slots (icons sit at x=165 and x=495, y ~ 185).
-let arrowColor = NSColor.white.withAlphaComponent(0.35)
+let arrowColor = NSColor(calibratedWhite: 0.2, alpha: 0.4)
 let arrow = NSBezierPath()
 arrow.move(to: NSPoint(x: 265, y: 185))
 arrow.line(to: NSPoint(x: 385, y: 185))
@@ -88,7 +88,7 @@ head.stroke()
 // Footer hint.
 let footerAttributes: [NSAttributedString.Key: Any] = [
     .font: NSFont.systemFont(ofSize: 11, weight: .regular),
-    .foregroundColor: NSColor.white.withAlphaComponent(0.3)
+    .foregroundColor: NSColor(calibratedWhite: 0.45, alpha: 1)
 ]
 let footer = "First launch: right-click Luma and choose Open" as NSString
 let footerWidth = footer.size(withAttributes: footerAttributes).width
