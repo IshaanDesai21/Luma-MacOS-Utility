@@ -54,7 +54,7 @@ final class AppModel {
         self.moduleServices = services
         self.moduleManager = moduleManager
         self.menuBarManager = MenuBarManager(moduleManager: moduleManager, settings: settings)
-        let nowPlaying = NowPlayingService(spotify: spotify)
+        let nowPlaying = NowPlayingService()
         self.nowPlaying = nowPlaying
         self.dynamicIslandManager = DynamicIslandManager(
             player: nowPlaying,
