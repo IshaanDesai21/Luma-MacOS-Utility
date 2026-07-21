@@ -80,6 +80,11 @@ final class AppModel {
         observeHotkeys()
         observeDockClick()
         installMediaKeyInterceptor()
+        // Any system volume change (keys, slider, AirPods) pops the island HUD.
+        moduleServices.audio.startObservingSystemChanges { [weak self] in
+            guard let self, self.settings.islandSystemHUD, self.settings.islandEnabled else { return }
+            self.islandModel.flashVolume()
+        }
     }
 
     /// Replaces the system volume/brightness bezel with the island readout.

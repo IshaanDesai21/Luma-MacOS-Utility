@@ -81,6 +81,27 @@ struct AudioDevice {
         AudioObjectRemovePropertyListenerBlock(id, &addr, queue, block)
     }
 
+    func addVolumeListener(scope: AudioObjectPropertyScope, queue: DispatchQueue, block: @escaping AudioObjectPropertyListenerBlock) {
+        var addr = volumeAddress(scope)
+        AudioObjectAddPropertyListenerBlock(id, &addr, queue, block)
+    }
+
+    func removeVolumeListener(scope: AudioObjectPropertyScope, queue: DispatchQueue, block: @escaping AudioObjectPropertyListenerBlock) {
+        var addr = volumeAddress(scope)
+        AudioObjectRemovePropertyListenerBlock(id, &addr, queue, block)
+    }
+
+    /// Observes the system-wide default output/input device switching (e.g.
+    /// connecting AirPods), so callers can re-register per-device listeners.
+    static func addDefaultDeviceListener(input: Bool, queue: DispatchQueue, block: @escaping AudioObjectPropertyListenerBlock) {
+        var addr = AudioObjectPropertyAddress(
+            mSelector: input ? kAudioHardwarePropertyDefaultInputDevice : kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &addr, queue, block)
+    }
+
     // MARK: - Addresses
 
     private func muteAddress(_ scope: AudioObjectPropertyScope) -> AudioObjectPropertyAddress {

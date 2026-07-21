@@ -65,7 +65,7 @@ struct DynamicIslandView: View {
                         startPoint: .top, endPoint: .bottom
                     )
                 )
-                .opacity(settings.islandSolidBlack ? 0 : 0.1 + 0.5 * settings.glassLevel)
+                .opacity(settings.islandSolidBlack ? 0 : 0.55 * settings.glassLevel)
                 .allowsHitTesting(false)
             }
             .overlay {
@@ -135,6 +135,12 @@ struct DynamicIslandView: View {
                     height: model.layout(for: .peek).height
                 )
                 .opacity(presentation == .peek ? 1 : 0)
+            hudContent
+                .frame(
+                    width: model.layout(for: .hud).width,
+                    height: model.layout(for: .hud).height
+                )
+                .opacity(presentation == .hud ? 1 : 0)
             expandedContent
                 .frame(
                     width: model.layout(for: .expanded).width,
@@ -144,21 +150,31 @@ struct DynamicIslandView: View {
         }
     }
 
+    // MARK: - Pop-out HUD (volume / brightness)
+
+    private var hudContent: some View {
+        let isBrightness = model.isBrightnessFlashing
+        let fraction = isBrightness ? CGFloat(model.brightness.brightness) : CGFloat(model.audio.volume)
+        return HStack(spacing: 12) {
+            Image(systemName: isBrightness ? "sun.max.fill" : volumeSymbol)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 22)
+            levelBar(fraction, width: 130, height: 5)
+            Text("\(Int((fraction * 100).rounded()))%")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(width: 38, alignment: .trailing)
+        }
+        .padding(.horizontal, 18)
+    }
+
     // MARK: - Peek (resting pod)
 
     private var peekContent: some View {
         HStack(spacing: 8) {
-            if model.isVolumeFlashing {
-                Image(systemName: volumeSymbol)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                levelBar(CGFloat(model.audio.volume))
-            } else if model.isBrightnessFlashing {
-                Image(systemName: "sun.max.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                levelBar(CGFloat(model.brightness.brightness))
-            } else if model.justUnlocked {
+            if model.justUnlocked {
                 Image(systemName: "lock.open.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.green)
@@ -220,18 +236,16 @@ struct DynamicIslandView: View {
         .padding(.horizontal, 12)
         .animation(.easeInOut(duration: 0.25), value: hasStatusIndicators)
         .animation(.easeInOut(duration: 0.25), value: model.justUnlocked)
-        .animation(.easeInOut(duration: 0.15), value: model.isVolumeFlashing)
-        .animation(.easeInOut(duration: 0.15), value: model.isBrightnessFlashing)
     }
 
-    private func levelBar(_ fraction: CGFloat) -> some View {
+    private func levelBar(_ fraction: CGFloat, width: CGFloat = 46, height: CGFloat = 4) -> some View {
         Capsule()
             .fill(.quaternary)
-            .frame(width: 46, height: 4)
+            .frame(width: width, height: height)
             .overlay(alignment: .leading) {
                 Capsule()
                     .fill(.primary)
-                    .frame(width: 46 * min(max(fraction, 0), 1))
+                    .frame(width: width * min(max(fraction, 0), 1))
             }
             .animation(.easeOut(duration: 0.1), value: fraction)
     }

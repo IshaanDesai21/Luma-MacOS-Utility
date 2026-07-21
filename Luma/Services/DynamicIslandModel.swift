@@ -11,6 +11,7 @@ import Observation
 final class DynamicIslandModel {
     enum Presentation: Equatable {
         case peek     // small resting glass pod
+        case hud      // volume/brightness readout popped out of the notch
         case expanded // full media card dropped down
     }
 
@@ -154,6 +155,8 @@ final class DynamicIslandModel {
     var presentation: Presentation {
         if isDropTargeting || justDropped { return .expanded }
         if settings.islandRevealOnHover || settings.islandHiddenUntilHover, isHovering { return .expanded }
+        // Volume/brightness changes pop a readout out of the notch.
+        if isVolumeFlashing || isBrightnessFlashing { return .hud }
         return .peek
     }
 
@@ -173,6 +176,10 @@ final class DynamicIslandModel {
             // shape is a true capsule at any scale.
             let height = 32 * scale
             return IslandLayout(width: 108 * scale, height: height, cornerRadius: height / 2)
+        case .hud:
+            // The pop-out readout: a wider capsule that springs from the notch.
+            let height = 46 * scale
+            return IslandLayout(width: 240 * scale, height: height, cornerRadius: height / 2)
         case .expanded:
             let tall = settings.islandFileShelf && (isDropTargeting || !shelf.items.isEmpty)
             return IslandLayout(width: 368 * scale, height: (tall ? 112 : 78) * scale, cornerRadius: 30 * scale)
