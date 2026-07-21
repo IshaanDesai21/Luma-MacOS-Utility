@@ -76,6 +76,7 @@ final class WindowManager {
     private func installContent(model: DynamicIslandModel) {
         let container = IslandContainerView(frame: CGRect(origin: .zero, size: canvasSize))
         container.interactiveRect = { [weak self] in self?.islandRectInView() ?? .zero }
+        container.onScroll = { [weak model] delta in model?.scrollVolume(by: delta) }
 
         let root = DynamicIslandView()
             .environment(model)
@@ -281,11 +282,17 @@ private final class IslandPanel: NSPanel {
 /// anything behind them.
 final class IslandContainerView: NSView {
     var interactiveRect: () -> CGRect = { .zero }
+    var onScroll: ((CGFloat) -> Void)?
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         // `point` is in the superview's coordinate space.
         let local = convert(point, from: superview)
         guard interactiveRect().insetBy(dx: -6, dy: -6).contains(local) else { return nil }
         return super.hitTest(point)
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        onScroll?(event.scrollingDeltaY)
+        super.scrollWheel(with: event)
     }
 }

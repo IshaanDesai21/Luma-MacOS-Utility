@@ -186,6 +186,34 @@ struct DynamicIslandPageView: View {
                 subtitle: "A padlock-open flash when your Mac unlocks.",
                 isOn: $settings.islandUnlockGlow
             )
+            Divider().padding(.leading, 52)
+            featureRow(
+                icon: "waveform",
+                title: "Music visualizer",
+                subtitle: "Animated equalizer bars in the pod while music plays.",
+                isOn: $settings.islandVisualizer
+            )
+            Divider().padding(.leading, 52)
+            featureRow(
+                icon: "speaker.wave.2.fill",
+                title: "Scroll to change volume",
+                subtitle: "Scroll on the pod to adjust system volume, with a mini readout.",
+                isOn: $settings.islandScrollVolume
+            )
+            Divider().padding(.leading, 52)
+            featureRow(
+                icon: "playpause.fill",
+                title: "Click to play / pause",
+                subtitle: "Clicking the resting pod toggles playback.",
+                isOn: $settings.islandClickPlayPause
+            )
+            Divider().padding(.leading, 52)
+            featureRow(
+                icon: "battery.25percent",
+                title: "Low battery warning",
+                subtitle: "A pulsing red battery in the pod under 15% when unplugged.",
+                isOn: $settings.islandLowBatteryAlert
+            )
         }
         .background(settings.glassMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }

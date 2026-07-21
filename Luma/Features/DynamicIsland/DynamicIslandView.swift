@@ -87,6 +87,12 @@ struct DynamicIslandView: View {
             } isTargeted: { targeted in
                 model.isDropTargeting = settings.islandFileShelf && targeted
             }
+            .onTapGesture {
+                // Click the resting pod to play/pause (buttons in the expanded
+                // card take precedence over this gesture).
+                guard presentation == .peek, settings.islandClickPlayPause, spotify.track != nil else { return }
+                spotify.playPause()
+            }
     }
 
     private func pulse() {
@@ -120,17 +126,34 @@ struct DynamicIslandView: View {
 
     private var peekContent: some View {
         HStack(spacing: 8) {
-            if model.justUnlocked {
+            if model.isVolumeFlashing {
+                Image(systemName: volumeSymbol)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Capsule()
+                    .fill(.quaternary)
+                    .frame(width: 46, height: 4)
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            .fill(.primary)
+                            .frame(width: 46 * CGFloat(model.audio.volume))
+                    }
+                    .animation(.easeOut(duration: 0.1), value: model.audio.volume)
+            } else if model.justUnlocked {
                 Image(systemName: "lock.open.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.green)
                     .transition(.scale.combined(with: .opacity))
             } else if spotify.track != nil {
                 artwork(size: 22, radius: 6)
-                Image(systemName: "waveform")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .symbolEffect(.variableColor.iterative, isActive: spotify.track?.isPlaying ?? false)
+                if settings.islandVisualizer, spotify.track?.isPlaying == true {
+                    VisualizerBars()
+                } else {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .symbolEffect(.variableColor.iterative, isActive: spotify.track?.isPlaying ?? false)
+                }
             } else if settings.islandShowClockIdle {
                 TimelineView(.everyMinute) { context in
                     Text(context.date, format: .dateTime.hour().minute())
@@ -159,6 +182,12 @@ struct DynamicIslandView: View {
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(.green)
                     }
+                    if model.isLowBattery {
+                        Image(systemName: "battery.25percent")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.red)
+                            .symbolEffect(.pulse, isActive: true)
+                    }
                 }
                 .transition(.opacity)
             }
@@ -166,11 +195,22 @@ struct DynamicIslandView: View {
         .padding(.horizontal, 12)
         .animation(.easeInOut(duration: 0.25), value: hasStatusIndicators)
         .animation(.easeInOut(duration: 0.25), value: model.justUnlocked)
+        .animation(.easeInOut(duration: 0.15), value: model.isVolumeFlashing)
+    }
+
+    private var volumeSymbol: String {
+        switch model.audio.volume {
+        case 0: return "speaker.slash.fill"
+        case ..<0.34: return "speaker.wave.1.fill"
+        case ..<0.67: return "speaker.wave.2.fill"
+        default: return "speaker.wave.3.fill"
+        }
     }
 
     private var hasStatusIndicators: Bool {
         (settings.islandShowSensors && (model.sensors.cameraActive || model.sensors.micActive))
             || (settings.islandChargingIndicator && model.sensors.isCharging)
+            || model.isLowBattery
     }
 
     // MARK: - Expanded card
@@ -288,6 +328,35 @@ struct DynamicIslandView: View {
         }
         .buttonStyle(.plain)
         .disabled(spotify.track == nil)
+    }
+
+    // MARK: - Visualizer
+
+    /// Little animated equalizer bars for the pod — smooth, deterministic
+    /// sine-driven motion (no audio tap needed).
+    private struct VisualizerBars: View {
+        var body: some View {
+            TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                HStack(spacing: 2.5) {
+                    ForEach(0..<4, id: \.self) { index in
+                        Capsule()
+                            .fill(.secondary)
+                            .frame(width: 2.5, height: height(index: index, time: t))
+                    }
+                }
+                .frame(height: 14, alignment: .center)
+            }
+        }
+
+        private func height(index: Int, time: TimeInterval) -> CGFloat {
+            // Each bar oscillates at its own frequency/phase so the group
+            // looks organic rather than synchronized.
+            let frequencies: [Double] = [2.1, 2.9, 2.4, 3.3]
+            let phases: [Double] = [0, 1.3, 2.6, 0.8]
+            let wave = sin(time * frequencies[index] + phases[index])
+            return 5 + CGFloat((wave + 1) / 2) * 9
+        }
     }
 
     private func artwork(size: CGFloat, radius: CGFloat) -> some View {

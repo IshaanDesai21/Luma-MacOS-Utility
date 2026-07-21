@@ -55,6 +55,8 @@ final class AppModel {
             spotify: spotify,
             settings: settings,
             shelf: services.shelf,
+            audio: services.audio,
+            monitor: monitor,
             moduleManager: moduleManager
         )
     }

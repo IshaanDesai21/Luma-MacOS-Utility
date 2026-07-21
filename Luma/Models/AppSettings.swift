@@ -115,6 +115,26 @@ final class AppSettings {
         didSet { defaults.set(islandUnlockGlow, forKey: Keys.islandUnlockGlow) }
     }
 
+    /// Animated equalizer bars in the pod while music plays.
+    var islandVisualizer: Bool {
+        didSet { defaults.set(islandVisualizer, forKey: Keys.islandVisualizer) }
+    }
+
+    /// Scroll on the pod to change system volume.
+    var islandScrollVolume: Bool {
+        didSet { defaults.set(islandScrollVolume, forKey: Keys.islandScrollVolume) }
+    }
+
+    /// Click the pod to play/pause (when reveal-on-hover is off).
+    var islandClickPlayPause: Bool {
+        didSet { defaults.set(islandClickPlayPause, forKey: Keys.islandClickPlayPause) }
+    }
+
+    /// Red battery flash in the pod when low and not charging.
+    var islandLowBatteryAlert: Bool {
+        didSet { defaults.set(islandLowBatteryAlert, forKey: Keys.islandLowBatteryAlert) }
+    }
+
     var islandShowWhilePlaying: Bool {
         didSet { defaults.set(islandShowWhilePlaying, forKey: Keys.islandShowWhilePlaying) }
     }
@@ -183,6 +203,10 @@ final class AppSettings {
         static let islandFileShelf = "island.fileShelf"
         static let islandTrackPulse = "island.trackPulse"
         static let islandUnlockGlow = "island.unlockGlow"
+        static let islandVisualizer = "island.visualizer"
+        static let islandScrollVolume = "island.scrollVolume"
+        static let islandClickPlayPause = "island.clickPlayPause"
+        static let islandLowBatteryAlert = "island.lowBatteryAlert"
         static let launchOnSettings = "app.launchOnSettings"
         static let dockClickToHide = "dock.clickToHide"
         static let islandHideShortcut = "shortcut.islandHide"
@@ -242,6 +266,10 @@ final class AppSettings {
         islandFileShelf = flag(Keys.islandFileShelf, default: true)
         islandTrackPulse = flag(Keys.islandTrackPulse, default: true)
         islandUnlockGlow = flag(Keys.islandUnlockGlow, default: true)
+        islandVisualizer = flag(Keys.islandVisualizer, default: true)
+        islandScrollVolume = flag(Keys.islandScrollVolume, default: true)
+        islandClickPlayPause = flag(Keys.islandClickPlayPause, default: true)
+        islandLowBatteryAlert = flag(Keys.islandLowBatteryAlert, default: true)
         launchOnSettings = defaults.bool(forKey: Keys.launchOnSettings)
         dockClickToHide = defaults.bool(forKey: Keys.dockClickToHide)
         islandHideShortcut = Self.loadShortcut(defaults, Keys.islandHideShortcut)

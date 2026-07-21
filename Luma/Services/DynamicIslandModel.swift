@@ -43,14 +43,24 @@ final class DynamicIslandModel {
     @ObservationIgnored let spotify: SpotifyService
     @ObservationIgnored let settings: AppSettings
     @ObservationIgnored let shelf: FileShelf
+    @ObservationIgnored let audio: AudioController
+    @ObservationIgnored let monitor: SystemMonitor
 
     /// Camera/mic/charging state shown in the resting pod.
     @ObservationIgnored let sensors = SensorActivityService()
 
-    init(spotify: SpotifyService, settings: AppSettings, shelf: FileShelf) {
+    init(
+        spotify: SpotifyService,
+        settings: AppSettings,
+        shelf: FileShelf,
+        audio: AudioController,
+        monitor: SystemMonitor
+    ) {
         self.spotify = spotify
         self.settings = settings
         self.shelf = shelf
+        self.audio = audio
+        self.monitor = monitor
         unlockObserver = DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("com.apple.screenIsUnlocked"),
             object: nil,
@@ -68,6 +78,46 @@ final class DynamicIslandModel {
             try? await Task.sleep(for: .seconds(2))
             self?.justUnlocked = false
         }
+    }
+
+    // MARK: - Scroll-to-volume
+
+    /// True briefly after a scroll so the pod can show the volume readout.
+    var isVolumeFlashing = false
+
+    @ObservationIgnored private var volumeFlashTask: Task<Void, Never>?
+    @ObservationIgnored private var scrollAccumulator: CGFloat = 0
+
+    /// Scrolling over the pod nudges the system volume.
+    func scrollVolume(by delta: CGFloat) {
+        guard settings.islandScrollVolume else { return }
+        // Accumulate small trackpad deltas into discrete volume steps.
+        scrollAccumulator += delta
+        let step: CGFloat = 6
+        guard abs(scrollAccumulator) >= step else { return }
+        let increments = Int(scrollAccumulator / step)
+        scrollAccumulator -= CGFloat(increments) * step
+        let newVolume = min(max(audio.volume + Float(increments) * 0.05, 0), 1)
+        audio.setVolume(newVolume)
+        flashVolume()
+    }
+
+    private func flashVolume() {
+        isVolumeFlashing = true
+        volumeFlashTask?.cancel()
+        volumeFlashTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.2))
+            guard !Task.isCancelled else { return }
+            self?.isVolumeFlashing = false
+        }
+    }
+
+    /// Battery is low and not on power — drives the red pod warning.
+    var isLowBattery: Bool {
+        settings.islandLowBatteryAlert
+            && monitor.hasBattery
+            && monitor.batteryLevel <= 0.15
+            && !monitor.batteryCharging
     }
 
     func noteDrop() {
