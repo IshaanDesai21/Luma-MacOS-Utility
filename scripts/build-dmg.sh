@@ -47,7 +47,7 @@ mkdir -p "$STAGE"
 cp -R "$APP_PATH" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 
-echo "▸ Creating $DMG…"
+echo "▸ Creating ${DMG}"
 rm -f "$DMG"
 hdiutil create \
   -volname "$VOLUME" \
