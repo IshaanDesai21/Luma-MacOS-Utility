@@ -135,6 +135,11 @@ final class AppSettings {
         didSet { defaults.set(islandLowBatteryAlert, forKey: Keys.islandLowBatteryAlert) }
     }
 
+    /// First-run setup assistant has been finished (or skipped).
+    var hasCompletedOnboarding: Bool {
+        didSet { defaults.set(hasCompletedOnboarding, forKey: Keys.hasCompletedOnboarding) }
+    }
+
     var islandShowWhilePlaying: Bool {
         didSet { defaults.set(islandShowWhilePlaying, forKey: Keys.islandShowWhilePlaying) }
     }
@@ -207,6 +212,7 @@ final class AppSettings {
         static let islandScrollVolume = "island.scrollVolume"
         static let islandClickPlayPause = "island.clickPlayPause"
         static let islandLowBatteryAlert = "island.lowBatteryAlert"
+        static let hasCompletedOnboarding = "app.hasCompletedOnboarding"
         static let launchOnSettings = "app.launchOnSettings"
         static let dockClickToHide = "dock.clickToHide"
         static let islandHideShortcut = "shortcut.islandHide"
@@ -270,6 +276,7 @@ final class AppSettings {
         islandScrollVolume = flag(Keys.islandScrollVolume, default: true)
         islandClickPlayPause = flag(Keys.islandClickPlayPause, default: true)
         islandLowBatteryAlert = flag(Keys.islandLowBatteryAlert, default: true)
+        hasCompletedOnboarding = defaults.bool(forKey: Keys.hasCompletedOnboarding)
         launchOnSettings = defaults.bool(forKey: Keys.launchOnSettings)
         dockClickToHide = defaults.bool(forKey: Keys.dockClickToHide)
         islandHideShortcut = Self.loadShortcut(defaults, Keys.islandHideShortcut)

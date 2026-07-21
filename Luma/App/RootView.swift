@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct RootView: View {
+    @Environment(AppSettings.self) private var settings
     @State private var selection: SidebarItem?
 
     init(initialItem: SidebarItem = .dynamicIsland) {
@@ -8,6 +9,16 @@ struct RootView: View {
     }
 
     var body: some View {
+        content
+            .sheet(isPresented: Binding(
+                get: { !settings.hasCompletedOnboarding },
+                set: { if !$0 { settings.hasCompletedOnboarding = true } }
+            )) {
+                OnboardingView()
+            }
+    }
+
+    private var content: some View {
         NavigationSplitView {
             List(selection: $selection) {
                 Section("Customize") {

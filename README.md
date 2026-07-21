@@ -1,133 +1,121 @@
 # Luma
 
-A native macOS utility platform built with SwiftUI + AppKit, MVVM, `@Observable`,
-and async/await. Targets **macOS 15+**, Apple Silicon. No Electron / web tech.
-
-Everything type-checks against the macOS SDK (`swiftc -typecheck`, Swift 5 mode,
-0 errors / 0 warnings). A full compile + run still needs Xcode (see below).
-
-## Download & Install
-
-Grab the latest **`Luma.dmg`** from the [Releases](../../releases) page, open it,
-and drag **Luma** into **Applications**.
-
-First launch (the app isn't notarized, so macOS Gatekeeper guards it):
-
-1. Double-click Luma → macOS says it can't verify the developer.
-2. Open **System Settings → Privacy & Security**, scroll down, and click
-   **Open Anyway** next to Luma. (On older macOS you can right-click Luma → **Open**.)
-3. If it says *"Luma is damaged"*, the download was quarantined — run:
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/Luma.app
-   ```
-
-Luma will ask for **Automation** permission the first time it reads Spotify, and
-it needs to be **outside the sandbox** (it is) to switch the Dock.
-
-## Build & Run (from source)
-
-```bash
-open Luma.xcodeproj      # select the "Luma" scheme → ⌘R
-```
-
-Requires **Xcode 26+** (Luma uses the macOS 26 Liquid Glass API, guarded so the
-built app still runs on macOS 15).
-
-## Package a DMG
-
-```bash
-./scripts/build-dmg.sh   # → build/Luma.dmg
-```
-
-## Publish a release
-
-Tag a version and let CI build + attach the DMG automatically:
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-The [`release`](.github/workflows/release.yml) workflow builds the DMG and
-publishes it to a GitHub Release. (The runner needs Xcode 26 for the Liquid
-Glass API; until GitHub's images ship it, build locally and upload manually:
-`gh release create v1.0.0 build/Luma.dmg --generate-notes`.)
-
-### Signing / notarization (optional, removes the Gatekeeper prompt)
-
-The DMG ships **ad-hoc signed**, so downloaders must approve it once (above).
-To make it open with no prompt, sign with a **Developer ID** (paid Apple
-Developer account) and notarize:
-
-```bash
-codesign --deep --force --options runtime \
-  --sign "Developer ID Application: Your Name (TEAMID)" build/dmg/Luma.app
-xcrun notarytool submit build/Luma.dmg --apple-id you@example.com \
-  --team-id TEAMID --password <app-specific-password> --wait
-xcrun stapler staple build/Luma.dmg
-```
+A native macOS utility that gives your Mac a **Dynamic Island**, a fully
+customizable **menu bar**, smarter **Dock** behavior, and one-click **workspace**
+switching — all in Liquid Glass. SwiftUI + AppKit, Apple Silicon, macOS 15+.
+No Electron, no web tech.
 
 ## Features
 
-- **Workspace** — any number of Dock layouts, saved as a snapshot of the live
-  Dock *or* composed manually from an app picker with a live Dock preview.
-- **Dock** — toggle the real `com.apple.dock` settings (autohide, magnification,
-  size, position, minimize effect, recents, …).
-- **Dynamic Island** — a floating notch overlay that tucks away and drops down
-  when the cursor reaches the top of the screen; peeks while music plays.
-- **Modules** — a modular platform. Each utility is a `Module` that can surface
-  itself in the Menu Bar, Touch Bar, Dynamic Island, and Sidebar. The Modules
-  page toggles each location per module, instantly.
-- **Menu Bar** — collapsed mode (one Luma icon → Liquid Glass popover) or an
-  individual status item per enabled module.
-- **Touch Bar** — auto-populated from enabled modules (visible on Touch Bar Macs
-  and Xcode's Window ▸ Touch Bar simulator). Includes a custom microphone toggle
-  with CoreAudio state-sync and a native "Mic Muted / Unmuted" HUD.
-- **Liquid Glass intensity**, animation speed, appearance, launch-at-login.
+### 🏝 Dynamic Island
+A small glass pod under the notch that springs open into a full media card when
+you hover near it. Everything is a toggle or slider — customize the notch to
+taste:
 
-### Modules included
+- **Now playing** (Spotify): title, artist, artwork, next/previous, play/pause
+- **Seek bar** — scrub the current song right from the notch
+- **Music visualizer** — animated equalizer bars in the pod while music plays
+- **File shelf** — drop files onto the island to hold them; drag them out later
+- **Camera & mic activity** — iOS-style green/orange dots when any app uses them
+- **Charging indicator** — green ⚡ while plugged in
+- **Low battery warning** — pulsing red battery under 15% when unplugged
+- **Clock when idle** — show the time when nothing is playing
+- **Scroll to change volume** — scroll on the pod, get a mini volume readout
+- **Click to play / pause** — tap the pod to toggle playback
+- **Unlock animation** — padlock-open flash when your Mac unlocks
+- **Pulse on track change** — the pod bounces when the song changes
+- Sliders for **position** (vertical + horizontal), **size**, and the
+  **activation area** (how close the cursor must get before it opens)
+- Hold **⌥ Option** over the island to hide it and click through
 
-Clock · Calendar · Timer · Spotify · Microphone · Battery · CPU · Memory ·
-Network · Brightness · Volume · Media Controls · Emoji · Mission Control ·
-Launchpad · Lock Screen · Sleep · Focus.
+### 📊 Menu Bar
+A modular strip you design yourself:
 
-## Adding a module
+- **Live preview editor** — drag chips to reorder; the real menu bar follows
+- **⋯ overflow folder** — drag modules past the divider line to tuck them
+  behind a single "everything else" button
+- **Compact mode** per module (icon only) to save space
+- **One-click actions** — the mic icon toggles mute instantly; the language
+  icon switches keyboard layout instantly (with a HUD)
+- **Collapse mode** — everything behind one Luma icon and a glass popover
+- 13 modules: Clock · Calendar · Timer · Spotify · Microphone · Keyboard ·
+  File Shelf · Battery · CPU · Memory · Network · Downloads · Clipboard
 
-1. Create `Features/Modules/<Name>/<Name>Module.swift` conforming to `Module`
-   (subclass `ModuleObject` for services + `@objc` actions).
-2. Add one line to `ModuleManager.registerModules`.
+### 🚢 Dock
+- **Click the active app's Dock icon to hide it** (like Supercharge) — the app
+  disappears and whatever's behind it comes forward; click again to bring it back
+- Toggle the real Dock settings from Luma: autohide, magnification, size,
+  position, minimize effect, indicators, recents…
 
-That's it — surfacing is driven polymorphically through the protocol, so no
-switch statements or manager edits are needed.
+### 🗂 Workspaces
+- Save any number of Dock layouts — snapshot the live Dock or compose one in
+  the visual builder (searchable app grid + live Dock preview)
+- Switch the entire Dock with one click
+
+### ⚙️ Everything else
+- **Liquid Glass slider** — from water-clear "very liquid" to fully frosted,
+  applied across the app and the island, with a live preview swatch
+- First-run **setup assistant** to dial in your notch in seconds
+- Global keyboard shortcuts (hide island, mute mic)
+- Launch at login, animation speed, light/dark/auto appearance
+
+## Install
+
+**One file.** Download **[`Luma.dmg`](../../releases/latest)** from Releases,
+open it, drag **Luma** into **Applications**. That's it — launch it from
+Spotlight like any app. (Prefer a bare app? Grab `Luma.zip` instead — it unzips
+straight to `Luma.app`.)
+
+First launch only — the app isn't notarized, so macOS asks once:
+
+1. Double-click Luma → macOS says it can't verify the developer.
+2. **System Settings → Privacy & Security** → click **Open Anyway**
+   (or right-click Luma → **Open** → **Open**).
+3. If macOS claims the app is "damaged":
+   `xattr -dr com.apple.quarantine /Applications/Luma.app`
+
+Luma walks you through a quick setup on first open. For the Dock
+click-to-hide feature, allow **Accessibility** when prompted; Spotify control
+asks for **Automation** the first time.
+
+## Build from source
+
+```bash
+open Luma.xcodeproj      # Xcode 26+, select "Luma" scheme → ⌘R
+./scripts/build-dmg.sh   # → build/Luma.dmg + build/Luma.zip
+```
+
+Pushing to `main` auto-builds and publishes the DMG + zip to the rolling
+**"Luma — latest build"** release; pushing a `v*` tag cuts a versioned release
+([workflow](.github/workflows/release.yml)).
 
 ## Architecture
 
 ```
 Luma/
-  App/            LumaApp, AppDelegate, AppModel, RootView, SidebarItem
-  Managers/       ModuleManager, MenuBarManager, TouchBarManager, DynamicIslandManager
+  App/            LumaApp, AppDelegate, AppModel, RootView, SidebarItem, Onboarding
+  Managers/       ModuleManager, MenuBarManager, DynamicIslandManager
   Features/
-    Workspace/    Dock switching + manual builder + preview
-    Dock/         com.apple.dock toggles
-    DynamicIsland/Floating overlay views
-    MenuBar/      Collapsed popover
-    Modules/<Name>/  one folder per module
-    Settings/     Settings + Modules pages
-  Services/       Dock, Spotify, System (CoreAudio, brightness, monitor), Window, HUD, catalog
-  Models/         Module, ModuleLocation, ModuleConfiguration, Workspace, Track, AppSettings, …
-  Utilities/      ModuleObject, TouchBar/MenuBar components, LaunchAtLogin, ProcessRunner
-  Resources/      Assets.xcassets (generated app icon)
+    DynamicIsland/  island view + settings page
+    Settings/       Menu Bar page (preview editor), Settings page
+    Dock/           Dock toggles + click-to-hide status
+    Workspace/      Dock switching + visual builder
+    MenuBar/        glass popover
+    Modules/<Name>/ one folder per module
+  Services/       WindowManager, DynamicIslandModel, Spotify, Dock, sensors, audio…
+  Models/         Module, ModuleConfiguration, Workspace, AppSettings, …
+  Utilities/      LiquidGlass, MenuBarChip, LaunchAtLogin, ProcessRunner
 ```
+
+Adding a module: create `Features/Modules/<Name>/<Name>Module.swift` conforming
+to `Module`, register it in `ModuleManager.registerModules` — done; every
+surface picks it up polymorphically.
 
 ## Permissions & notes
 
-- **Not sandboxed** (`Luma.entitlements`) so it can replace the Dock plist,
-  run `killall Dock` / `pmset`, and use DisplayServices for brightness.
+- **Not sandboxed** so it can switch the Dock, intercept Dock clicks, and read
+  system state.
+- **Accessibility** — required only for Dock click-to-hide (re-grant after
+  replacing the app: remove the old entry in System Settings, then re-allow).
 - **Automation (Spotify)** prompts on first playback read/control.
-- **Microphone mute** uses CoreAudio; devices without a settable hardware mute
-  fall back to zeroing input volume.
-- **Brightness** loads DisplayServices at runtime; unavailable on some external
-  displays.
-- The app icon is generated by `Tools/GenerateIcon.swift` (`swift Tools/GenerateIcon.swift`);
-  `Luma-Logo-1024.png` is a standalone copy you can upload.
-```
+- App icon is generated by `Tools/GenerateIcon.swift`.
