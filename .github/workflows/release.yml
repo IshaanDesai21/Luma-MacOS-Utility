@@ -1,19 +1,18 @@
 name: Release
 
-# Builds a DMG and publishes it to a GitHub Release whenever you push a tag
-# like `v1.0.0`. You can also run it manually from the Actions tab.
+# Builds Luma.dmg + Luma.zip and publishes them as GitHub Release assets:
+#   • every push to `main` updates the rolling "latest" release
+#   • pushing a tag like `v1.0.0` creates a versioned release
+#   • it can also be run manually from the Actions tab
 #
-#   git tag v1.0.0 && git push origin v1.0.0
-#
-# NOTE: Luma uses the macOS 26 "Liquid Glass" API (guarded at runtime), so the
-# runner must have Xcode 26+ installed. Adjust the Xcode version below once
-# GitHub's images ship it; until then, build locally with ./scripts/build-dmg.sh
-# and upload the DMG to the release manually.
+# NOTE: Luma compiles against the macOS 26 SDK (Liquid Glass, guarded at
+# runtime), so the runner needs Xcode 26+. If the `macos-26` label is ever
+# unavailable, switch to the newest macOS image that ships Xcode 26.
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -21,16 +20,18 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode
+      - name: Select newest Xcode
         run: |
-          sudo xcode-select -switch /Applications/Xcode.app
+          XCODE="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          echo "Using $XCODE"
+          sudo xcode-select -switch "$XCODE"
           xcodebuild -version
 
-      - name: Build DMG
+      - name: Build DMG + app zip
         run: |
           chmod +x scripts/build-dmg.sh
           ./scripts/build-dmg.sh
@@ -38,12 +39,46 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Luma-dmg
-          path: build/Luma.dmg
+          name: Luma
+          path: |
+            build/Luma.dmg
+            build/Luma.zip
 
-      - name: Publish GitHub Release
+      - name: Publish versioned release (tags)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: build/Luma.dmg
+          files: |
+            build/Luma.dmg
+            build/Luma.zip
           generate_release_notes: true
+          body: |
+            ## Install
+            Download **Luma.dmg**, open it, and drag Luma into Applications
+            (or download **Luma.zip** and unzip straight to an app).
+
+            The app isn’t notarized, so the first launch needs one extra step:
+            **right-click Luma.app → Open → Open**, or run
+            `xattr -cr /Applications/Luma.app`.
+
+      - name: Publish rolling "latest" release (main)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Luma — latest build
+          prerelease: true
+          files: |
+            build/Luma.dmg
+            build/Luma.zip
+          body: |
+            Automatic build of the newest code on `main`
+            (commit ${{ github.sha }}).
+
+            ## Install
+            Download **Luma.dmg**, open it, and drag Luma into Applications
+            (or download **Luma.zip** and unzip straight to an app).
+
+            The app isn’t notarized, so the first launch needs one extra step:
+            **right-click Luma.app → Open → Open**, or run
+            `xattr -cr /Applications/Luma.app`.

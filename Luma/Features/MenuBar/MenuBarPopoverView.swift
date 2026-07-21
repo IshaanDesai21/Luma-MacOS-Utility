@@ -1,16 +1,19 @@
 import SwiftUI
 
-/// Contents of the collapsed menu-bar popover: every enabled menu-bar module,
-/// stacked, on a Liquid Glass background.
+/// A stacked list of menu-bar modules on a Liquid Glass background. Used by the
+/// collapsed single-icon mode (all modules) and by the "⋯" overflow folder
+/// (just the tucked-away ones).
 struct MenuBarPopoverView: View {
-    let moduleManager: ModuleManager
+    let modules: [Module]
     let settings: AppSettings
+    var title: String = "Luma"
+    var icon: String = "moon.stars"
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Image(systemName: "moon.stars")
-                Text("Luma")
+                Image(systemName: icon)
+                Text(title)
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
             }
@@ -20,7 +23,6 @@ struct MenuBarPopoverView: View {
 
             Divider()
 
-            let modules = moduleManager.modules(for: .menuBar)
             if modules.isEmpty {
                 Text("No menu-bar modules enabled")
                     .font(.system(size: 12))

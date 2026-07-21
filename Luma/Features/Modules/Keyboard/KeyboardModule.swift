@@ -15,6 +15,19 @@ final class KeyboardModule: ModuleObject, Module {
         AnyView(Popover(source: services.inputSource))
     }
 
+    // Clicking the menu-bar item switches language directly — no popover.
+    func menuBarAction() -> (() -> Void)? {
+        { [weak self] in
+            guard let self else { return }
+            self.services.inputSource.cycle()
+            self.services.hud.show(
+                symbol: "keyboard",
+                title: self.services.inputSource.name,
+                animationSpeed: self.services.settings.animationSpeed
+            )
+        }
+    }
+
     private struct Chip: View {
         let source: InputSourceController
         var body: some View {

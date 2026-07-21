@@ -55,14 +55,14 @@ final class MenuBarManager {
         guard !modules.isEmpty else { return }
 
         if moduleManager.collapseMenuBar {
-            buildCollapsed()
+            buildCollapsed(modules)
         } else {
-            buildIndividual(modules)
+            buildIndividual()
         }
     }
 
-    private func buildIndividual(_ modules: [Module]) {
-        for module in modules {
+    private func buildIndividual() {
+        for module in moduleManager.individualMenuBarModules() {
             let compact = moduleManager.isCompact(module)
             let label = module.menuBarView(compact: compact)
                 ?? AnyView(MenuBarChip(systemImage: module.icon, text: ""))
@@ -77,15 +77,28 @@ final class MenuBarManager {
                 directAction: module.menuBarAction()
             ))
         }
+
+        // Everything dragged into the overflow folder shares one "⋯" button.
+        let foldered = moduleManager.folderMenuBarModules()
+        if !foldered.isEmpty {
+            let icon = AnyView(
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 14, weight: .medium))
+            )
+            let content = AnyView(
+                MenuBarPopoverView(modules: foldered, settings: settings, title: "More", icon: "ellipsis.circle")
+            )
+            controllers.append(MenuBarItemController(label: icon, content: content, width: 300))
+        }
     }
 
-    private func buildCollapsed() {
+    private func buildCollapsed(_ modules: [Module]) {
         let icon = AnyView(
             Image(systemName: "moon.stars")
                 .font(.system(size: 14, weight: .medium))
         )
         let content = AnyView(
-            MenuBarPopoverView(moduleManager: moduleManager, settings: settings)
+            MenuBarPopoverView(modules: modules, settings: settings)
         )
         controllers.append(MenuBarItemController(label: icon, content: content, width: 300))
     }
@@ -112,7 +125,8 @@ final class MenuBarItemController: NSObject {
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
     private weak var hostView: NSHostingView<AnyView>?
-    private let horizontalPadding: CGFloat = 12
+    // Kept tight so items sit close together in the menu bar.
+    private let horizontalPadding: CGFloat = 6
     private let directAction: (() -> Void)?
 
     init(label: AnyView, content: AnyView, width: CGFloat, directAction: (() -> Void)? = nil) {

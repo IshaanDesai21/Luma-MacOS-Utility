@@ -9,8 +9,8 @@ struct ModulesView: View {
         ScrollView {
             VStack(spacing: 20) {
                 PageHeader(
-                    title: "Modules",
-                    subtitle: "Choose where each utility appears across macOS."
+                    title: "Menu Bar",
+                    subtitle: "Arrange the strip, tuck extras into the ⋯ folder, and choose where each module appears."
                 )
 
                 MenuBarPreviewView(moduleManager: moduleManager, settings: settings)
@@ -26,7 +26,7 @@ struct ModulesView: View {
             .padding(40)
             .frame(maxWidth: .infinity)
         }
-        .navigationTitle("Modules")
+        .navigationTitle("Menu Bar")
     }
 
     private var menuBarModeCard: some View {

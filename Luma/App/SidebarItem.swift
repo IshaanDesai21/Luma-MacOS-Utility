@@ -1,30 +1,30 @@
 import Foundation
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case workspace
-    case dock
     case dynamicIsland
-    case modules
+    case menuBar
+    case dock
+    case workspace
     case settings
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .workspace: return "Workspace"
-        case .dock: return "Dock"
         case .dynamicIsland: return "Dynamic Island"
-        case .modules: return "Modules"
+        case .menuBar: return "Menu Bar"
+        case .dock: return "Dock"
+        case .workspace: return "Workspaces"
         case .settings: return "Settings"
         }
     }
 
     var symbol: String {
         switch self {
-        case .workspace: return "macwindow"
-        case .dock: return "dock.rectangle"
         case .dynamicIsland: return "waveform"
-        case .modules: return "square.grid.2x2"
+        case .menuBar: return "menubar.rectangle"
+        case .dock: return "dock.rectangle"
+        case .workspace: return "macwindow"
         case .settings: return "gearshape"
         }
     }

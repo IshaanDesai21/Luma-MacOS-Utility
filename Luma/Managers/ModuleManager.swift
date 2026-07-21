@@ -77,6 +77,29 @@ final class ModuleManager {
         ordered(modules.filter { isVisible($0, in: .menuBar) })
     }
 
+    /// Menu-bar modules that get their own status item.
+    func individualMenuBarModules() -> [Module] {
+        orderedMenuBarModules().filter { !isInMenuBarFolder($0) }
+    }
+
+    /// Menu-bar modules tucked behind the single "⋯" overflow button.
+    func folderMenuBarModules() -> [Module] {
+        orderedMenuBarModules().filter { isInMenuBarFolder($0) }
+    }
+
+    func isInMenuBarFolder(_ module: Module) -> Bool {
+        configuration.menuBarFolder.contains(module.id)
+    }
+
+    func setInMenuBarFolder(_ inFolder: Bool, for module: Module) {
+        if inFolder {
+            configuration.menuBarFolder.insert(module.id)
+        } else {
+            configuration.menuBarFolder.remove(module.id)
+        }
+        bump()
+    }
+
     private func ordered(_ list: [Module]) -> [Module] {
         let order = configuration.menuBarOrder
         return list.sorted { a, b in

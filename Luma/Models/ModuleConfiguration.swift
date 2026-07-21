@@ -39,11 +39,20 @@ struct ModuleConfiguration: Codable, Equatable {
     /// User-chosen left-to-right order of menu-bar modules, by id. Ids absent
     /// here fall back to registration order, appended after the arranged ones.
     var menuBarOrder: [String]
+    /// Modules tucked into the overflow folder: they share one "⋯" menu-bar
+    /// button instead of having their own icon.
+    var menuBarFolder: Set<String>
 
-    init(modules: [String: ModuleConfig], collapseMenuBar: Bool, menuBarOrder: [String] = []) {
+    init(
+        modules: [String: ModuleConfig],
+        collapseMenuBar: Bool,
+        menuBarOrder: [String] = [],
+        menuBarFolder: Set<String> = []
+    ) {
         self.modules = modules
         self.collapseMenuBar = collapseMenuBar
         self.menuBarOrder = menuBarOrder
+        self.menuBarFolder = menuBarFolder
     }
 
     init(from decoder: Decoder) throws {
@@ -51,11 +60,12 @@ struct ModuleConfiguration: Codable, Equatable {
         modules = try c.decode([String: ModuleConfig].self, forKey: .modules)
         collapseMenuBar = try c.decodeIfPresent(Bool.self, forKey: .collapseMenuBar) ?? false
         menuBarOrder = try c.decodeIfPresent([String].self, forKey: .menuBarOrder) ?? []
+        menuBarFolder = try c.decodeIfPresent(Set<String>.self, forKey: .menuBarFolder) ?? []
     }
 
-    private enum CodingKeys: String, CodingKey { case modules, collapseMenuBar, menuBarOrder }
+    private enum CodingKeys: String, CodingKey { case modules, collapseMenuBar, menuBarOrder, menuBarFolder }
 
     static var empty: ModuleConfiguration {
-        ModuleConfiguration(modules: [:], collapseMenuBar: false, menuBarOrder: [])
+        ModuleConfiguration(modules: [:], collapseMenuBar: false, menuBarOrder: [], menuBarFolder: [])
     }
 }

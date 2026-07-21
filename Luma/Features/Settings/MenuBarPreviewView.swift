@@ -2,7 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// A live menu-bar preview whose chips can be dragged to reorder and clicked to
-/// edit (compact form, remove). Mirrors exactly what appears in the real menu bar.
+/// edit. Chips left of the divider line get their own menu-bar icon; anything
+/// dragged to the right of the line is tucked into the "⋯" overflow folder.
 struct MenuBarPreviewView: View {
     let moduleManager: ModuleManager
     let settings: AppSettings
@@ -11,21 +12,19 @@ struct MenuBarPreviewView: View {
     @State private var editing: String?
 
     var body: some View {
-        let modules = moduleManager.orderedMenuBarModules()
-
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Menu Bar")
                     .font(.system(size: 14, weight: .semibold))
-                Text("Drag to reorder · click an icon to edit it")
+                Text("Drag to reorder · drag past the line to tuck into the ⋯ folder · click an icon to edit it")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
 
-            previewStrip(modules)
+            previewStrip
 
             if let editing, let module = moduleManager.module(id: editing) {
-                editor(module, siblings: modules)
+                editor(module)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
@@ -37,27 +36,29 @@ struct MenuBarPreviewView: View {
 
     // MARK: - Preview strip
 
-    @ViewBuilder
-    private func previewStrip(_ modules: [Module]) -> some View {
-        HStack(spacing: 4) {
-            if modules.isEmpty {
+    private var previewStrip: some View {
+        let individual = moduleManager.individualMenuBarModules()
+        let foldered = moduleManager.folderMenuBarModules()
+
+        return HStack(spacing: 3) {
+            if individual.isEmpty && foldered.isEmpty {
                 Text("No modules in the menu bar")
                     .font(.system(size: 12))
                     .foregroundStyle(.white.opacity(0.6))
                     .padding(.vertical, 4)
             } else {
-                ForEach(modules, id: \.id) { module in
-                    chip(module)
-                        .onDrag {
-                            dragging = module.id
-                            return NSItemProvider(object: module.id as NSString)
-                        }
-                        .onDrop(of: [.plainText], delegate: ReorderDropDelegate(
-                            item: module.id, dragging: $dragging, manager: moduleManager
-                        ))
-                        .onTapGesture {
-                            editing = (editing == module.id) ? nil : module.id
-                        }
+                ForEach(individual, id: \.id) { module in
+                    chip(module, inFolder: false)
+                }
+
+                divider
+
+                if foldered.isEmpty {
+                    emptyFolderZone
+                } else {
+                    ForEach(foldered, id: \.id) { module in
+                        chip(module, inFolder: true)
+                    }
                 }
             }
             Spacer(minLength: 0)
@@ -72,7 +73,33 @@ struct MenuBarPreviewView: View {
         .environment(\.colorScheme, .dark)
     }
 
-    private func chip(_ module: Module) -> some View {
+    private var divider: some View {
+        RoundedRectangle(cornerRadius: 1)
+            .fill(.white.opacity(0.4))
+            .frame(width: 2, height: 20)
+            .padding(.horizontal, 5)
+            .help("Modules right of this line live in the ⋯ folder")
+    }
+
+    /// Drop target shown while the folder is empty.
+    private var emptyFolderZone: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 12, weight: .medium))
+            Text("folder")
+                .font(.system(size: 10))
+        }
+        .foregroundStyle(.white.opacity(0.45))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(.white.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+        )
+        .onDrop(of: [.plainText], delegate: FolderZoneDropDelegate(dragging: $dragging, manager: moduleManager))
+    }
+
+    private func chip(_ module: Module, inFolder: Bool) -> some View {
         let isEditing = editing == module.id
         return (module.menuBarView(compact: moduleManager.isCompact(module))
             ?? AnyView(MenuBarChip(systemImage: module.icon, text: "")))
@@ -88,12 +115,23 @@ struct MenuBarPreviewView: View {
             )
             .contentShape(Rectangle())
             .opacity(dragging == module.id ? 0.4 : 1)
+            .onDrag {
+                dragging = module.id
+                return NSItemProvider(object: module.id as NSString)
+            }
+            .onDrop(of: [.plainText], delegate: ReorderDropDelegate(
+                item: module.id, targetInFolder: inFolder, dragging: $dragging, manager: moduleManager
+            ))
+            .onTapGesture {
+                editing = (editing == module.id) ? nil : module.id
+            }
     }
 
     // MARK: - Editor
 
-    private func editor(_ module: Module, siblings: [Module]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private func editor(_ module: Module) -> some View {
+        let siblings = moduleManager.orderedMenuBarModules()
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Image(systemName: module.icon)
                     .font(.system(size: 14, weight: .medium))
@@ -117,6 +155,17 @@ struct MenuBarPreviewView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Compact (icon only)").font(.system(size: 12))
                     Text("Hides the label so it takes less room.")
+                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                }
+            }
+
+            Toggle(isOn: Binding(
+                get: { moduleManager.isInMenuBarFolder(module) },
+                set: { moduleManager.setInMenuBarFolder($0, for: module) }
+            )) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Keep in ⋯ folder").font(.system(size: 12))
+                    Text("Shown inside the overflow button instead of its own icon.")
                         .font(.system(size: 10)).foregroundStyle(.secondary)
                 }
             }
@@ -167,22 +216,49 @@ struct MenuBarPreviewView: View {
     }
 }
 
-/// Live hover-reordering for the horizontal preview: as the dragged chip passes
-/// over another, the order is updated immediately.
+/// Live hover-reordering: as the dragged chip passes over another, the order
+/// updates immediately — and the dragged chip adopts the target's side of the
+/// divider (individual vs. folder).
 private struct ReorderDropDelegate: DropDelegate {
     let item: String
+    let targetInFolder: Bool
     @Binding var dragging: String?
     let manager: ModuleManager
 
     func dropEntered(info: DropInfo) {
         guard let dragging, dragging != item else { return }
+        if let module = manager.module(id: dragging),
+           manager.isInMenuBarFolder(module) != targetInFolder {
+            manager.setInMenuBarFolder(targetInFolder, for: module)
+        }
         var ids = manager.orderedMenuBarModules().map(\.id)
-        guard let from = ids.firstIndex(of: dragging),
-              let to = ids.firstIndex(of: item) else { return }
-        guard from != to else { return }
+        guard let from = ids.firstIndex(of: dragging) else { return }
         ids.remove(at: from)
+        guard let to = ids.firstIndex(of: item) else { return }
         ids.insert(dragging, at: to)
         manager.setMenuBarOrder(ids)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        dragging = nil
+        return true
+    }
+}
+
+/// Dropping onto the empty folder placeholder tucks the dragged module away.
+private struct FolderZoneDropDelegate: DropDelegate {
+    @Binding var dragging: String?
+    let manager: ModuleManager
+
+    func dropEntered(info: DropInfo) {
+        guard let dragging, let module = manager.module(id: dragging) else { return }
+        if !manager.isInMenuBarFolder(module) {
+            manager.setInMenuBarFolder(true, for: module)
+        }
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {

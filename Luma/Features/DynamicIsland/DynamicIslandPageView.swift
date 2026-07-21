@@ -96,6 +96,19 @@ struct DynamicIslandPageView: View {
                     Image(systemName: "plus").font(.caption2).foregroundStyle(.secondary)
                 }
             }
+            VStack(alignment: .leading, spacing: 4) {
+                LabeledContent("Activation area", value: "\(Int(settings.islandActivationArea * 100))%")
+                Slider(value: $settings.islandActivationArea, in: 0.5...2.5) {
+                    Text("Activation area")
+                } minimumValueLabel: {
+                    Text("Small").font(.caption2).foregroundStyle(.secondary)
+                } maximumValueLabel: {
+                    Text("Large").font(.caption2).foregroundStyle(.secondary)
+                }
+                Text("How close the cursor must get to the notch before the island opens.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(16)
         .background(settings.glassMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -125,41 +138,75 @@ struct DynamicIslandPageView: View {
             .padding(.top, 14)
             .padding(.bottom, 6)
 
-            ForEach(Array(DynamicIslandFeature.catalog.enumerated()), id: \.element.id) { index, feature in
-                featureRow(feature, settings: settings)
-                if index != DynamicIslandFeature.catalog.count - 1 {
-                    Divider().padding(.leading, 52)
-                }
-            }
+            featureRow(
+                icon: "camera.badge.ellipsis",
+                title: "Camera & mic activity",
+                subtitle: "Green/orange dots in the pod while any app uses them.",
+                isOn: $settings.islandShowSensors
+            )
+            Divider().padding(.leading, 52)
+            featureRow(
+                icon: "bolt.fill",
+                title: "Charging indicator",
+                subtitle: "A green bolt while your Mac is plugged in and charging.",
+                isOn: $settings.islandChargingIndicator
+            )
+            Divider().padding(.leading, 52)
+            featureRow(
+                icon: "clock",
+                title: "Clock when idle",
+                subtitle: "Show the time in the pod when nothing is playing.",
+                isOn: $settings.islandShowClockIdle
+            )
+            Divider().padding(.leading, 52)
+            featureRow(
+                icon: "slider.horizontal.below.rectangle",
+                title: "Seek bar",
+                subtitle: "Scrub the current song from the expanded card.",
+                isOn: $settings.islandShowSeekBar
+            )
+            Divider().padding(.leading, 52)
+            featureRow(
+                icon: "tray.full",
+                title: "File shelf",
+                subtitle: "Drop files on the island to hold them for later.",
+                isOn: $settings.islandFileShelf
+            )
+            Divider().padding(.leading, 52)
+            featureRow(
+                icon: "music.note.list",
+                title: "Pulse on track change",
+                subtitle: "The pod gives a little bounce when the song changes.",
+                isOn: $settings.islandTrackPulse
+            )
+            Divider().padding(.leading, 52)
+            featureRow(
+                icon: "lock.open.fill",
+                title: "Unlock animation",
+                subtitle: "A padlock-open flash when your Mac unlocks.",
+                isOn: $settings.islandUnlockGlow
+            )
         }
         .background(settings.glassMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    @ViewBuilder
-    private func featureRow(_ feature: DynamicIslandFeature, settings: AppSettings) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: feature.icon)
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
-                .frame(width: 24)
-            Text(feature.name)
-                .font(.system(size: 13))
-            Spacer()
-            if feature.available {
-                Label("On", systemImage: "checkmark.circle.fill")
-                    .labelStyle(.iconOnly)
-                    .foregroundStyle(.green)
-            } else {
-                Text("Soon")
-                    .font(.system(size: 10, weight: .semibold))
+    private func featureRow(icon: String, title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(.quaternary, in: Capsule())
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: 13))
+                    Text(subtitle)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .opacity(feature.available ? 1 : 0.55)
     }
 }

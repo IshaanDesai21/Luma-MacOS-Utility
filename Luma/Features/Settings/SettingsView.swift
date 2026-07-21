@@ -25,10 +25,24 @@ struct SettingsView: View {
             }
 
             Section("Liquid Glass") {
-                Picker("Intensity", selection: $settings.glassIntensity) {
-                    ForEach(AppSettings.GlassIntensity.allCases) { Text($0.title).tag($0) }
+                VStack(alignment: .leading, spacing: 6) {
+                    Slider(value: $settings.glassLevel, in: 0...1) {
+                        Text("Glass")
+                    } minimumValueLabel: {
+                        Text("Liquid").font(.caption2).foregroundStyle(.secondary)
+                    } maximumValueLabel: {
+                        Text("Frosted").font(.caption2).foregroundStyle(.secondary)
+                    }
+                    // Live swatch so the effect of the slider is visible right here.
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(.clear)
+                        .frame(height: 44)
+                        .liquidGlass(in: RoundedRectangle(cornerRadius: 12, style: .continuous), level: settings.glassLevel)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(.white.opacity(0.15), lineWidth: 0.6)
+                        )
                 }
-                .pickerStyle(.segmented)
             }
 
             Section("Animation Speed") {

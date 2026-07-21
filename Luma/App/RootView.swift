@@ -3,20 +3,22 @@ import SwiftUI
 struct RootView: View {
     @State private var selection: SidebarItem?
 
-    init(initialItem: SidebarItem = .workspace) {
+    init(initialItem: SidebarItem = .dynamicIsland) {
         _selection = State(initialValue: initialItem)
     }
 
     var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
-                Section {
-                    row(.workspace)
-                    row(.dock)
+                Section("Customize") {
                     row(.dynamicIsland)
+                    row(.menuBar)
+                    row(.dock)
                 }
-                Section {
-                    row(.modules)
+                Section("Workflows") {
+                    row(.workspace)
+                }
+                Section("General") {
                     row(.settings)
                 }
             }
@@ -37,11 +39,11 @@ struct RootView: View {
 
     @ViewBuilder
     private var detail: some View {
-        switch selection ?? .workspace {
-        case .workspace: WorkspaceView()
-        case .dock: DockSettingsView()
+        switch selection ?? .dynamicIsland {
         case .dynamicIsland: DynamicIslandPageView()
-        case .modules: ModulesView()
+        case .menuBar: ModulesView()
+        case .dock: DockSettingsView()
+        case .workspace: WorkspaceView()
         case .settings: SettingsView()
         }
     }

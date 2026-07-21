@@ -29,44 +29,9 @@ final class AppSettings {
     }
 
     /// Controls how translucent the app's glass surfaces appear.
-    enum GlassIntensity: String, CaseIterable, Identifiable {
-        case ultraThin, thin, regular, thick
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .ultraThin: return "Clear"
-            case .thin: return "Light"
-            case .regular: return "Regular"
-            case .thick: return "Frosted"
-            }
-        }
-
-        var material: Material {
-            switch self {
-            case .ultraThin: return .ultraThinMaterial
-            case .thin: return .thinMaterial
-            case .regular: return .regularMaterial
-            case .thick: return .thickMaterial
-            }
-        }
-
-        /// A milky frost layer drawn over the glass; higher levels read as more
-        /// opaque/frosted. Drives the visible difference between levels on the
-        /// macOS 26 glass path (where `glassEffect` has only clear/regular).
-        var frostScrim: Double {
-            switch self {
-            case .ultraThin: return 0.0
-            case .thin: return 0.12
-            case .regular: return 0.24
-            case .thick: return 0.40
-            }
-        }
-
-        /// Whether to use the barely-there `.clear` glass on macOS 26.
-        var prefersClearGlass: Bool { self == .ultraThin }
-    }
+    /// Continuous Liquid Glass amount: 0 = water-clear "very liquid" glass,
+    /// 1 = fully frosted. Everything glassy derives from this one number.
+    /// Set via `glassLevel`.
 
     var appearance: Appearance {
         didSet {
@@ -80,8 +45,8 @@ final class AppSettings {
         didSet { defaults.set(animationSpeed, forKey: Keys.animationSpeed) }
     }
 
-    var glassIntensity: GlassIntensity {
-        didSet { defaults.set(glassIntensity.rawValue, forKey: Keys.glassIntensity) }
+    var glassLevel: Double {
+        didSet { defaults.set(glassLevel, forKey: Keys.glassLevel) }
     }
 
     // Dynamic Island behaviour.
@@ -106,6 +71,48 @@ final class AppSettings {
     /// Overall island size multiplier.
     var islandScale: Double {
         didSet { defaults.set(islandScale, forKey: Keys.islandScale) }
+    }
+
+    /// Size multiplier for the hover strip that opens the island (1 = default).
+    var islandActivationArea: Double {
+        didSet { defaults.set(islandActivationArea, forKey: Keys.islandActivationArea) }
+    }
+
+    // MARK: Island feature toggles
+
+    /// Green/orange dots in the pod while any app uses the camera/mic.
+    var islandShowSensors: Bool {
+        didSet { defaults.set(islandShowSensors, forKey: Keys.islandShowSensors) }
+    }
+
+    /// Green bolt in the pod while the Mac is charging.
+    var islandChargingIndicator: Bool {
+        didSet { defaults.set(islandChargingIndicator, forKey: Keys.islandChargingIndicator) }
+    }
+
+    /// Show the time in the pod when nothing is playing.
+    var islandShowClockIdle: Bool {
+        didSet { defaults.set(islandShowClockIdle, forKey: Keys.islandShowClockIdle) }
+    }
+
+    /// Seek bar inside the expanded media card.
+    var islandShowSeekBar: Bool {
+        didSet { defaults.set(islandShowSeekBar, forKey: Keys.islandShowSeekBar) }
+    }
+
+    /// Accept file drops and keep them on the island shelf.
+    var islandFileShelf: Bool {
+        didSet { defaults.set(islandFileShelf, forKey: Keys.islandFileShelf) }
+    }
+
+    /// Little bounce of the pod when the track changes.
+    var islandTrackPulse: Bool {
+        didSet { defaults.set(islandTrackPulse, forKey: Keys.islandTrackPulse) }
+    }
+
+    /// Padlock-open flash when the Mac unlocks.
+    var islandUnlockGlow: Bool {
+        didSet { defaults.set(islandUnlockGlow, forKey: Keys.islandUnlockGlow) }
     }
 
     var islandShowWhilePlaying: Bool {
@@ -134,7 +141,15 @@ final class AppSettings {
 
     // MARK: - Derived
 
-    var glassMaterial: Material { glassIntensity.material }
+    /// Material for glass card backgrounds, bucketed from the continuous level.
+    var glassMaterial: Material {
+        switch glassLevel {
+        case ..<0.25: return .ultraThinMaterial
+        case ..<0.5: return .thinMaterial
+        case ..<0.75: return .regularMaterial
+        default: return .thickMaterial
+        }
+    }
 
     var springAnimation: Animation {
         let response = 0.42 / max(animationSpeed, 0.1)
@@ -152,13 +167,22 @@ final class AppSettings {
     private enum Keys {
         static let appearance = "settings.appearance"
         static let animationSpeed = "settings.animationSpeed"
-        static let glassIntensity = "settings.glassIntensity"
+        static let glassIntensity = "settings.glassIntensity"   // legacy 4-level value, migrated
+        static let glassLevel = "settings.glassLevel"
         static let islandEnabled = "island.enabled"
         static let islandRevealOnHover = "island.revealOnHover"
         static let islandShowWhilePlaying = "island.showWhilePlaying"
         static let islandVerticalOffset = "island.verticalOffset"
         static let islandHorizontalOffset = "island.horizontalOffset"
         static let islandScale = "island.scale"
+        static let islandActivationArea = "island.activationArea"
+        static let islandShowSensors = "island.showSensors"
+        static let islandChargingIndicator = "island.chargingIndicator"
+        static let islandShowClockIdle = "island.showClockIdle"
+        static let islandShowSeekBar = "island.showSeekBar"
+        static let islandFileShelf = "island.fileShelf"
+        static let islandTrackPulse = "island.trackPulse"
+        static let islandUnlockGlow = "island.unlockGlow"
         static let launchOnSettings = "app.launchOnSettings"
         static let dockClickToHide = "dock.clickToHide"
         static let islandHideShortcut = "shortcut.islandHide"
@@ -186,7 +210,17 @@ final class AppSettings {
         let storedSpeed = defaults.double(forKey: Keys.animationSpeed)
         animationSpeed = storedSpeed == 0 ? 1.0 : storedSpeed
 
-        glassIntensity = GlassIntensity(rawValue: defaults.string(forKey: Keys.glassIntensity) ?? "") ?? .regular
+        if defaults.object(forKey: Keys.glassLevel) != nil {
+            glassLevel = defaults.double(forKey: Keys.glassLevel)
+        } else {
+            // Migrate the old 4-level picker value onto the continuous slider.
+            switch defaults.string(forKey: Keys.glassIntensity) {
+            case "ultraThin": glassLevel = 0.05
+            case "thin": glassLevel = 0.35
+            case "thick": glassLevel = 0.9
+            default: glassLevel = 0.55
+            }
+        }
 
         islandEnabled = defaults.object(forKey: Keys.islandEnabled) as? Bool ?? true
         islandRevealOnHover = defaults.object(forKey: Keys.islandRevealOnHover) as? Bool ?? true
@@ -195,6 +229,19 @@ final class AppSettings {
         islandHorizontalOffset = defaults.double(forKey: Keys.islandHorizontalOffset)
         let storedScale = defaults.double(forKey: Keys.islandScale)
         islandScale = storedScale == 0 ? 1.0 : storedScale
+        let storedActivation = defaults.double(forKey: Keys.islandActivationArea)
+        islandActivationArea = storedActivation == 0 ? 1.0 : storedActivation
+        // Feature toggles default to on (except the idle clock).
+        func flag(_ key: String, default def: Bool) -> Bool {
+            defaults.object(forKey: key) == nil ? def : defaults.bool(forKey: key)
+        }
+        islandShowSensors = flag(Keys.islandShowSensors, default: true)
+        islandChargingIndicator = flag(Keys.islandChargingIndicator, default: true)
+        islandShowClockIdle = flag(Keys.islandShowClockIdle, default: false)
+        islandShowSeekBar = flag(Keys.islandShowSeekBar, default: true)
+        islandFileShelf = flag(Keys.islandFileShelf, default: true)
+        islandTrackPulse = flag(Keys.islandTrackPulse, default: true)
+        islandUnlockGlow = flag(Keys.islandUnlockGlow, default: true)
         launchOnSettings = defaults.bool(forKey: Keys.launchOnSettings)
         dockClickToHide = defaults.bool(forKey: Keys.dockClickToHide)
         islandHideShortcut = Self.loadShortcut(defaults, Keys.islandHideShortcut)

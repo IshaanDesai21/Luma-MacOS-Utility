@@ -6,7 +6,7 @@ struct LumaApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(initialItem: appDelegate.model.settings.launchOnSettings ? .settings : .workspace)
+            RootView(initialItem: appDelegate.model.settings.launchOnSettings ? .settings : .dynamicIsland)
                 .environment(appDelegate.model)
                 .environment(appDelegate.model.settings)
                 .environment(appDelegate.model.spotify)

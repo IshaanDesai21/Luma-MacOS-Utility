@@ -57,6 +57,10 @@ hdiutil create \
   -ov \
   "$DMG"
 
+echo "▸ Zipping app (alternative download)…"
+ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$BUILD/Luma.zip"
+
 echo ""
 echo "✓ Done → $DMG"
+echo "         $BUILD/Luma.zip"
 echo "  Drag Luma into Applications from the mounted image."

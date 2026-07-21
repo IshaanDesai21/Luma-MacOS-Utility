@@ -48,7 +48,9 @@ final class DynamicIslandManager {
     private func apply() {
         if settings.islandEnabled {
             windowManager.show(model: model)
+            model.sensors.start()
         } else {
+            model.sensors.stop()
             windowManager.hide()
         }
     }

@@ -2,35 +2,51 @@ import SwiftUI
 
 extension View {
     /// Applies real Liquid Glass on macOS 26+, falling back to a native material
-    /// on macOS 15. The chosen ``AppSettings/GlassIntensity`` drives both the
-    /// blur and an intensity-scaled frost scrim so every level looks distinct
-    /// (the raw `glassEffect` API otherwise renders every level identically).
-    func liquidGlass(in shape: some Shape, intensity: AppSettings.GlassIntensity) -> some View {
+    /// on macOS 15. `level` runs 0 → 1: water-clear "very liquid" glass through
+    /// to fully frosted.
+    func liquidGlass(in shape: some Shape, level: Double) -> some View {
         background {
-            LiquidGlassSurface(shape: shape, intensity: intensity)
+            LiquidGlassSurface(shape: shape, level: level)
         }
     }
 }
 
-/// The layered glass backing: a blurred glass base plus a frost scrim whose
-/// opacity scales with the intensity so "Clear → Frosted" is clearly visible.
+/// The layered glass backing, driven by one continuous knob:
+/// - the glass base switches from `.clear` (liquid) to `.regular` as the level
+///   rises past the low end,
+/// - a milky frost scrim fades in continuously on top, so the far end reads as
+///   properly frosted. Every position of the slider looks distinct.
 struct LiquidGlassSurface<S: Shape>: View {
     let shape: S
-    let intensity: AppSettings.GlassIntensity
+    let level: Double
+
+    private var clamped: Double { min(max(level, 0), 1) }
+
+    /// 0 at the liquid end, up to 0.45 white at fully frosted.
+    private var frostOpacity: Double { clamped * 0.45 }
 
     var body: some View {
         ZStack {
             glassBase
-            shape.fill(.white.opacity(intensity.frostScrim))
+            shape.fill(.white.opacity(frostOpacity))
         }
     }
 
     @ViewBuilder
     private var glassBase: some View {
         if #available(macOS 26.0, *) {
-            Color.clear.glassEffect(intensity.prefersClearGlass ? .clear : .regular, in: shape)
+            Color.clear.glassEffect(clamped < 0.2 ? .clear : .regular, in: shape)
         } else {
-            shape.fill(.clear).background(intensity.material, in: shape)
+            shape.fill(.clear).background(fallbackMaterial, in: shape)
+        }
+    }
+
+    private var fallbackMaterial: Material {
+        switch clamped {
+        case ..<0.25: return .ultraThinMaterial
+        case ..<0.5: return .thinMaterial
+        case ..<0.75: return .regularMaterial
+        default: return .thickMaterial
         }
     }
 }

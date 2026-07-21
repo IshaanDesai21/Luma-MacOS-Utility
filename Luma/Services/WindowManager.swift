@@ -2,13 +2,17 @@ import AppKit
 import SwiftUI
 import Observation
 
-/// Owns the floating Dynamic Island `NSPanel`.
+/// Owns the Dynamic Island overlay window.
 ///
-/// The panel is sized to the island itself (no dead click-box), accepts file
-/// drops, and animates its frame while SwiftUI crossfades the contents.
+/// The panel is a fixed-size transparent canvas pinned to the top-center of the
+/// screen. It NEVER animates or resizes — SwiftUI alone draws and animates the
+/// island inside it, so window layout and view layout cannot fight (the source
+/// of every past sizing glitch). Clicks pass through everywhere except the
+/// island's own rect, which the container view hit-tests dynamically.
 @MainActor
 final class WindowManager {
     private var panel: NSPanel?
+    private var container: IslandContainerView?
     private var model: DynamicIslandModel?
 
     private var localMouseMonitor: Any?
@@ -17,10 +21,11 @@ final class WindowManager {
     private var globalFlagsMonitor: Any?
     private var screenObserver: NSObjectProtocol?
     private var collapseTask: Task<Void, Never>?
-    private var hoverZone: CGRect = .zero
-    private var commandDismissed = false
+    private var optionDismissed = false
 
-    private let margin: CGFloat = 16
+    /// Canvas size — big enough for the largest island at maximum scale plus
+    /// shadow slack. Static so the window frame never has to change.
+    private let canvasSize = CGSize(width: 640, height: 260)
 
     // MARK: - Lifecycle
 
@@ -30,14 +35,14 @@ final class WindowManager {
             createPanel()
             installContent(model: model)
         }
+        position()
         panel?.orderFrontRegardless()
         installMonitors()
         beginObserving()
-        layout(animated: false)
-        // Re-run once the run loop settles, in case screen info wasn't ready yet.
+        // Screen info can be stale at launch; settle once the run loop turns.
         Task { @MainActor [weak self] in
+            self?.position()
             self?.panel?.orderFrontRegardless()
-            self?.layout(animated: false)
         }
     }
 
@@ -52,7 +57,7 @@ final class WindowManager {
 
     private func createPanel() {
         let panel = IslandPanel(
-            contentRect: CGRect(x: 0, y: 0, width: 160, height: 60),
+            contentRect: CGRect(origin: .zero, size: canvasSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -69,8 +74,9 @@ final class WindowManager {
     }
 
     private func installContent(model: DynamicIslandModel) {
-        // The panel sits in the notch / menu-bar band; opt out of safe areas so
-        // insets can't push or squash the island's layout there.
+        let container = IslandContainerView(frame: CGRect(origin: .zero, size: canvasSize))
+        container.interactiveRect = { [weak self] in self?.islandRectInView() ?? .zero }
+
         let root = DynamicIslandView()
             .environment(model)
             .environment(model.spotify)
@@ -79,7 +85,64 @@ final class WindowManager {
         let host = NSHostingView(rootView: AnyView(root))
         host.sizingOptions = []
         host.safeAreaRegions = []
-        panel?.contentView = host
+        host.frame = container.bounds
+        host.autoresizingMask = [.width, .height]
+        container.addSubview(host)
+
+        panel?.contentView = container
+        self.container = container
+    }
+
+    /// Pins the canvas to the top-center of the target screen (plus the user's
+    /// horizontal offset). Called on screen/setting changes only — never as part
+    /// of presentation changes, and never animated.
+    private func position() {
+        guard let panel, let model, let screen = targetScreen() else { return }
+        model.topInset = topInset(for: screen)
+        let x = screen.frame.midX - canvasSize.width / 2 + CGFloat(model.settings.islandHorizontalOffset)
+        let y = screen.frame.maxY - canvasSize.height
+        panel.setFrame(CGRect(x: x, y: y, width: canvasSize.width, height: canvasSize.height), display: true)
+    }
+
+    // MARK: - Geometry (single source shared by hit-testing and hover)
+
+    /// The island's rect in the panel's view coordinates (origin bottom-left).
+    private func islandRectInView() -> CGRect {
+        guard let model else { return .zero }
+        let layout = model.currentLayout
+        return CGRect(
+            x: (canvasSize.width - layout.width) / 2,
+            y: canvasSize.height - model.topInset - layout.height,
+            width: layout.width,
+            height: layout.height
+        )
+    }
+
+    /// Same rect in global screen coordinates (for hover monitors).
+    private func islandRectOnScreen() -> CGRect {
+        guard let panel else { return .zero }
+        let local = islandRectInView()
+        return CGRect(
+            x: panel.frame.minX + local.minX,
+            y: panel.frame.minY + local.minY,
+            width: local.width,
+            height: local.height
+        )
+    }
+
+    /// Strip along the top of the screen around the notch that wakes the island.
+    /// The user's activation-area setting scales how far it reaches.
+    private func hoverZone() -> CGRect {
+        guard let panel, let model else { return .zero }
+        let factor = CGFloat(model.settings.islandActivationArea)
+        let width = max(model.currentLayout.width + 60, 260) * factor
+        let height = model.topInset + 8 + 10 * factor
+        return CGRect(
+            x: panel.frame.midX - width / 2,
+            y: (targetScreen()?.frame.maxY ?? panel.frame.maxY) - height,
+            width: width,
+            height: height
+        )
     }
 
     // MARK: - Hover + modifier monitoring
@@ -113,11 +176,10 @@ final class WindowManager {
     }
 
     private func updateHover(at point: CGPoint) {
-        guard let model, !commandDismissed else { return }
-        let overZone = hoverZone.contains(point)
-        let overPanel = model.presentation != .hidden && (panel?.frame.contains(point) ?? false)
+        guard let model, !optionDismissed else { return }
+        let over = hoverZone().contains(point) || islandRectOnScreen().insetBy(dx: -8, dy: -8).contains(point)
 
-        if overZone || overPanel {
+        if over {
             collapseTask?.cancel()
             collapseTask = nil
             if !model.isHovering { model.isHovering = true }
@@ -129,28 +191,28 @@ final class WindowManager {
     private func scheduleCollapse() {
         guard collapseTask == nil else { return }
         collapseTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(120))
+            try? await Task.sleep(for: .milliseconds(140))
             guard let self, !Task.isCancelled else { return }
             self.model?.isHovering = false
             self.collapseTask = nil
         }
     }
 
-    /// Holding Option while over the notch/island dismisses it so you can click
+    /// Holding Option while over the island dismisses it so you can click
     /// through. Option elsewhere does nothing.
     private func handleFlags(_ flags: NSEvent.ModifierFlags) {
         let point = NSEvent.mouseLocation
-        let overNotch = hoverZone.contains(point) || (panel?.frame.contains(point) ?? false)
-        if flags.contains(.option), overNotch {
-            setCommandDismissed(true)
+        let overIsland = hoverZone().contains(point) || islandRectOnScreen().contains(point)
+        if flags.contains(.option), overIsland {
+            setOptionDismissed(true)
         } else if !flags.contains(.option) {
-            setCommandDismissed(false)
+            setOptionDismissed(false)
         }
     }
 
-    private func setCommandDismissed(_ dismissed: Bool) {
-        guard commandDismissed != dismissed else { return }
-        commandDismissed = dismissed
+    private func setOptionDismissed(_ dismissed: Bool) {
+        guard optionDismissed != dismissed else { return }
+        optionDismissed = dismissed
         panel?.ignoresMouseEvents = dismissed
         panel?.animator().alphaValue = dismissed ? 0 : 1
     }
@@ -164,80 +226,31 @@ final class WindowManager {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.layout(animated: true) }
+                MainActor.assumeIsolated { self?.position() }
             }
         }
-        observeState()
+        observeSettings()
     }
 
-    private func observeState() {
+    private func observeSettings() {
         withObservationTracking { [weak self] in
-            _ = self?.model?.currentMetrics
-            _ = self?.model?.settings.glassIntensity
-            _ = self?.model?.settings.islandScale
-            _ = self?.model?.settings.islandVerticalOffset
             _ = self?.model?.settings.islandHorizontalOffset
+            _ = self?.model?.settings.islandVerticalOffset
         } onChange: { [weak self] in
             Task { @MainActor in
-                self?.layout(animated: true)
-                self?.observeState()
+                self?.position()
+                self?.observeSettings()
             }
         }
     }
 
-    // MARK: - Layout
-
-    private func layout(animated: Bool) {
-        guard let panel, let model, let screen = targetScreen() else { return }
-        model.topInset = topInset(for: screen)
-        hoverZone = topHoverZone(on: screen)
-
-        let scale = CGFloat(model.settings.islandScale)
-        let metrics = model.currentMetrics
-        let width = metrics.width * scale + margin * 2
-        let height = metrics.height * scale + margin * 2
-        let islandTop = screen.frame.maxY - model.topInset
-        let horizontalOffset = CGFloat(model.settings.islandHorizontalOffset)
-        let frame = CGRect(
-            x: screen.frame.midX - width / 2 + horizontalOffset,
-            y: islandTop + margin - height,
-            width: width,
-            height: height
-        )
-
-        if animated {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = model.settings.islandAnimationDuration
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                context.allowsImplicitAnimation = true
-                panel.animator().setFrame(frame, display: true)
-            }
-        } else {
-            panel.setFrame(frame, display: true)
-        }
-    }
-
-    private func topHoverZone(on screen: NSScreen) -> CGRect {
-        let width = max(notchWidth(of: screen) + 90, 240)
-        let inset = topInset(for: screen)
-        let height = inset + 12
-        let offset = CGFloat(model?.settings.islandHorizontalOffset ?? 0)
-        return CGRect(x: screen.frame.midX - width / 2 + offset, y: screen.frame.maxY - height, width: width, height: height)
-    }
+    // MARK: - Screen
 
     private func topInset(for screen: NSScreen) -> CGFloat {
-        // Below the notch on notched Macs; near the top otherwise. The user
-        // offset raises it further toward the top.
-        let base = screen.safeAreaInsets.top > 0 ? screen.safeAreaInsets.top : 6
+        // Below the notch on notched Macs; just under the top edge otherwise.
+        let base = screen.safeAreaInsets.top > 0 ? screen.safeAreaInsets.top : 4
         let offset = CGFloat(model?.settings.islandVerticalOffset ?? 0)
         return max(base - offset, 0)
-    }
-
-    private func notchWidth(of screen: NSScreen) -> CGFloat {
-        let left = screen.auxiliaryTopLeftArea?.width ?? 0
-        let right = screen.auxiliaryTopRightArea?.width ?? 0
-        guard left > 0, right > 0 else { return 200 }
-        return max(screen.frame.width - left - right, 0)
     }
 
     private func targetScreen() -> NSScreen? {
@@ -261,4 +274,18 @@ final class WindowManager {
 private final class IslandPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+}
+
+/// Content view for the canvas: passes clicks through except over the island,
+/// so the invisible parts of the big fixed window never block the menu bar or
+/// anything behind them.
+final class IslandContainerView: NSView {
+    var interactiveRect: () -> CGRect = { .zero }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // `point` is in the superview's coordinate space.
+        let local = convert(point, from: superview)
+        guard interactiveRect().insetBy(dx: -6, dy: -6).contains(local) else { return nil }
+        return super.hitTest(point)
+    }
 }

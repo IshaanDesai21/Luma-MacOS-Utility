@@ -1,9 +1,15 @@
 import SwiftUI
 import AppKit
 
-/// The floating overlay. The window sizes the panel; this view forces its glass
-/// shape to exactly the panel size (via GeometryReader) so content can never
-/// overflow into a giant rectangle. Inner states crossfade.
+/// The Dynamic Island. Renders inside a fixed transparent canvas window; this
+/// view alone decides the island's size, shape, and position, so what you see
+/// is exactly ``DynamicIslandModel/currentLayout`` — nothing else can stretch
+/// or squash it.
+///
+/// At rest it's a small glass capsule pod hanging below the notch; on hover it
+/// springs open into the full glass media card. Content layers are fixed at
+/// their own natural sizes and crossfade while the glass container animates,
+/// so nothing reflows mid-animation.
 struct DynamicIslandView: View {
     @Environment(DynamicIslandModel.self) private var model
     @Environment(SpotifyService.self) private var spotify
@@ -11,116 +17,171 @@ struct DynamicIslandView: View {
 
     var forcedPresentation: DynamicIslandModel.Presentation?
 
+    @State private var pulsing = false
+
     private var presentation: DynamicIslandModel.Presentation {
         forcedPresentation ?? model.presentation
     }
 
-    var body: some View {
-        island
-            .padding(16)                                          // shadow margin (matches window)
-            // Fill the panel with a concrete size so the glass sizes to the actual
-            // (animated) window — not the inner layers' natural size — which keeps
-            // the resting shape a proper pill. Only the window animates size, so
-            // the glass grows symmetrically about center; SwiftUI just crossfades.
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .animation(settings.islandAnimation, value: presentation)
-            .animation(settings.springAnimation, value: spotify.track)
-            .animation(settings.islandAnimation, value: model.isDropTargeting)
+    private var layout: DynamicIslandModel.IslandLayout {
+        model.layout(for: presentation)
     }
 
+    var body: some View {
+        island
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, forcedPresentation == nil ? model.topInset : 0)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    // MARK: - Island container
+
     private var island: some View {
-        let shape = islandShape
-        return innerLayers
-            .scaleEffect(settings.islandScale)                    // render at chosen size
-            // Fill the window (its animated frame is the single size source) so
-            // the glass is always exactly centered and reveals in place.
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipShape(shape)
+        let layout = layout
+        let shape = RoundedRectangle(cornerRadius: layout.cornerRadius, style: .continuous)
+        let expanded = presentation == .expanded
+
+        return contentLayers
+            .frame(width: layout.width, height: layout.height)
             .background {
-                // Liquid Glass in every state — the resting pod is a small glass
-                // capsule, the expanded card the same glass grown large.
-                LiquidGlassSurface(shape: shape, intensity: settings.glassIntensity)
+                LiquidGlassSurface(shape: shape, level: settings.glassLevel)
             }
+            .clipShape(shape)
             .overlay {
+                // Gentle top sheen so the glass reads as glass.
                 shape.fill(
                     LinearGradient(
-                        colors: [.white.opacity(0.28), .white.opacity(0.04), .clear],
+                        colors: [.white.opacity(0.22), .white.opacity(0.03), .clear],
                         startPoint: .top, endPoint: .bottom
                     )
                 )
-                .blendMode(.plusLighter)
-                .opacity(presentation == .hidden ? 0 : 0.35)
+                .opacity(0.5)
                 .allowsHitTesting(false)
             }
-            .overlay(shape.stroke(.white.opacity(presentation == .hidden ? 0 : 0.16), lineWidth: 0.6).allowsHitTesting(false))
-            .shadow(color: .black.opacity(presentation == .hidden ? 0 : 0.3), radius: shadowRadius, y: shadowOffset)
+            .overlay {
+                shape.stroke(.white.opacity(0.16), lineWidth: 0.8)
+                    .allowsHitTesting(false)
+            }
+            .shadow(
+                color: .black.opacity(expanded ? 0.30 : 0.18),
+                radius: expanded ? 18 : 8,
+                y: expanded ? 8 : 3
+            )
+            // Little bounce when the track changes or the Mac unlocks.
+            .scaleEffect(pulsing || model.justUnlocked ? 1.05 : 1)
+            // One spring on one geometry value — size, radius, and position all
+            // animate together; the window never moves.
+            .animation(settings.springAnimation, value: layout)
+            .animation(.easeInOut(duration: 0.16), value: presentation)
+            .animation(settings.springAnimation, value: pulsing)
+            .animation(settings.springAnimation, value: model.justUnlocked)
+            .onChange(of: spotify.track?.title) { old, new in
+                guard settings.islandTrackPulse, old != nil, new != nil else { return }
+                pulse()
+            }
             .dropDestination(for: URL.self) { urls, _ in
+                guard settings.islandFileShelf else { return false }
                 model.shelf.add(urls: urls)
                 model.noteDrop()
                 return true
             } isTargeted: { targeted in
-                model.isDropTargeting = targeted
+                model.isDropTargeting = settings.islandFileShelf && targeted
             }
     }
 
-    // MARK: - Inner states (crossfaded)
+    private func pulse() {
+        pulsing = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(220))
+            pulsing = false
+        }
+    }
 
-    // Each layer is pinned to the natural size of its own presentation — never
-    // the animating outer frame — so content can't reflow (cramp then spring)
-    // while the island grows. The glass container animates the size and clips
-    // each layer into view; crossfade handles the swap.
-    private var innerLayers: some View {
+    /// Both states, each laid out at its own natural size and crossfaded, so
+    /// content never reflows while the glass container resizes over it.
+    private var contentLayers: some View {
         ZStack {
-            idle
-                .frame(width: hiddenMetrics.width, height: hiddenMetrics.height)
-                .opacity(presentation == .hidden ? 1 : 0)
-            peek
-                .frame(width: peekMetrics.width, height: peekMetrics.height)
+            peekContent
+                .frame(
+                    width: model.layout(for: .peek).width,
+                    height: model.layout(for: .peek).height
+                )
                 .opacity(presentation == .peek ? 1 : 0)
-            expandedLayer
-                .frame(width: expandedMetrics.width, height: expandedMetrics.height)
+            expandedContent
+                .frame(
+                    width: model.layout(for: .expanded).width,
+                    height: model.layout(for: .expanded).height
+                )
                 .opacity(presentation == .expanded ? 1 : 0)
         }
     }
 
-    private var hiddenMetrics: DynamicIslandModel.Metrics { model.metrics(for: .hidden) }
-    private var peekMetrics: DynamicIslandModel.Metrics { model.metrics(for: .peek) }
-    private var expandedMetrics: DynamicIslandModel.Metrics {
-        var m = model.metrics(for: .expanded)
-        if model.isDropTargeting || !model.shelf.items.isEmpty { m.height = 112 }
-        return m
-    }
+    // MARK: - Peek (resting pod)
 
-    private var idle: some View {
-        RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .fill(.black.opacity(0.92))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var peek: some View {
-        HStack(spacing: 9) {
-            if spotify.track != nil {
-                artwork(size: 24, radius: 6)
+    private var peekContent: some View {
+        HStack(spacing: 8) {
+            if model.justUnlocked {
+                Image(systemName: "lock.open.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.green)
+                    .transition(.scale.combined(with: .opacity))
+            } else if spotify.track != nil {
+                artwork(size: 22, radius: 6)
                 Image(systemName: "waveform")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .symbolEffect(.variableColor.iterative, isActive: spotify.track?.isPlaying ?? false)
+            } else if settings.islandShowClockIdle {
+                TimelineView(.everyMinute) { context in
+                    Text(context.date, format: .dateTime.hour().minute())
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 Image(systemName: "music.note")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
             }
+
+            // iOS-style status: green dot = camera in use, orange dot = mic in
+            // use, green bolt = charging.
+            if hasStatusIndicators {
+                HStack(spacing: 4) {
+                    if settings.islandShowSensors && model.sensors.cameraActive {
+                        Circle().fill(.green).frame(width: 6, height: 6)
+                    }
+                    if settings.islandShowSensors && model.sensors.micActive {
+                        Circle().fill(.orange).frame(width: 6, height: 6)
+                    }
+                    if settings.islandChargingIndicator && model.sensors.isCharging {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.green)
+                    }
+                }
+                .transition(.opacity)
+            }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 12)
+        .animation(.easeInOut(duration: 0.25), value: hasStatusIndicators)
+        .animation(.easeInOut(duration: 0.25), value: model.justUnlocked)
     }
 
-    private var expandedLayer: some View {
+    private var hasStatusIndicators: Bool {
+        (settings.islandShowSensors && (model.sensors.cameraActive || model.sensors.micActive))
+            || (settings.islandChargingIndicator && model.sensors.isCharging)
+    }
+
+    // MARK: - Expanded card
+
+    private var expandedContent: some View {
         ZStack {
             dropZone.opacity(model.isDropTargeting ? 1 : 0)
             mediaAndShelf.opacity(model.isDropTargeting ? 0 : 1)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
     }
 
     private var dropZone: some View {
@@ -135,7 +196,7 @@ struct DynamicIslandView: View {
     private var mediaAndShelf: some View {
         VStack(spacing: 8) {
             mediaRow
-            if !model.shelf.items.isEmpty {
+            if settings.islandFileShelf && !model.shelf.items.isEmpty {
                 shelfStrip
             }
         }
@@ -149,13 +210,15 @@ struct DynamicIslandView: View {
                     .font(.system(size: 13, weight: .semibold)).lineLimit(1)
                 Text(spotify.track?.artist ?? "Drag files here to hold them")
                     .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                SeekBar(
-                    progress: spotify.track?.progress ?? 0,
-                    duration: spotify.track?.duration ?? 0,
-                    onSeek: { spotify.seek(to: $0) }
-                )
-                .frame(height: 11)
-                .disabled(spotify.track == nil)
+                if settings.islandShowSeekBar {
+                    SeekBar(
+                        progress: spotify.track?.progress ?? 0,
+                        duration: spotify.track?.duration ?? 0,
+                        onSeek: { spotify.seek(to: $0) }
+                    )
+                    .frame(height: 11)
+                    .disabled(spotify.track == nil)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             controls
@@ -243,39 +306,5 @@ struct DynamicIslandView: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-    }
-
-    // MARK: - Shape metrics
-
-    /// A capsule at rest — geometrically always a pill, no matter what size the
-    /// panel gives us — and a rounded rectangle only when expanded.
-    private var islandShape: AnyShape {
-        presentation == .expanded
-            ? AnyShape(RoundedRectangle(cornerRadius: 26 * settings.islandScale, style: .continuous))
-            : AnyShape(Capsule(style: .continuous))
-    }
-
-    private var radius: CGFloat {
-        switch presentation {
-        case .hidden: return 4
-        case .peek: return 17
-        case .expanded: return 26
-        }
-    }
-
-    private var shadowRadius: CGFloat {
-        switch presentation {
-        case .expanded: return 16
-        case .peek: return 7
-        case .hidden: return 0
-        }
-    }
-
-    private var shadowOffset: CGFloat {
-        switch presentation {
-        case .expanded: return 7
-        case .peek: return 3
-        case .hidden: return 0
-        }
     }
 }
