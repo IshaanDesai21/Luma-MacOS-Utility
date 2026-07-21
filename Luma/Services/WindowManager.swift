@@ -80,7 +80,10 @@ final class WindowManager {
             let y = screen.frame.maxY - inset - canvasSize.height + model.topInset
             panel.setFrame(CGRect(x: x, y: y, width: canvasSize.width, height: canvasSize.height), display: true)
             panel.alphaValue = optionDismissed ? 0 : 1
-            panel.ignoresMouseEvents = optionDismissed
+            // Pass-through by default: the big canvas must NEVER eat clicks.
+            // `updateInteractivity` flips this off only while the cursor is
+            // actually over the island itself.
+            panel.ignoresMouseEvents = true
             panel.orderFrontRegardless()
 
             entries.append(Entry(panel: panel, container: container, screenFrame: screen.frame, screenInset: inset))
@@ -181,11 +184,13 @@ final class WindowManager {
 
     private func installMonitors() {
         guard localMouseMonitor == nil else { return }
-        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+        // Also watch drags so file drops flip the panel interactive in time.
+        let moveMask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged]
+        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: moveMask) { [weak self] event in
             self?.updateHover(at: NSEvent.mouseLocation)
             return event
         }
-        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
+        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: moveMask) { [weak self] _ in
             MainActor.assumeIsolated { self?.updateHover(at: NSEvent.mouseLocation) }
         }
         localFlagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
@@ -208,6 +213,7 @@ final class WindowManager {
     }
 
     private func updateHover(at point: CGPoint) {
+        updateInteractivity(at: point)
         guard let model, !optionDismissed else { return }
         if isOverIsland(point) {
             collapseTask?.cancel()
@@ -215,6 +221,26 @@ final class WindowManager {
             if !model.isHovering { model.isHovering = true }
         } else if model.isHovering {
             scheduleCollapse()
+        }
+    }
+
+    /// The canvas windows pass every event through except when the cursor is
+    /// over the island itself. Returning nil from hitTest is not enough: the
+    /// window server still routes clicks to the topmost window, so the flag
+    /// must be flipped ahead of the click.
+    private func updateInteractivity(at point: CGPoint) {
+        let local = islandRectInCanvas()
+        for entry in entries {
+            let rect = CGRect(
+                x: entry.panel.frame.minX + local.minX,
+                y: entry.panel.frame.minY + local.minY,
+                width: local.width,
+                height: local.height
+            ).insetBy(dx: -8, dy: -8)
+            let interactive = !optionDismissed && rect.contains(point)
+            if entry.panel.ignoresMouseEvents == interactive {
+                entry.panel.ignoresMouseEvents = !interactive
+            }
         }
     }
 
@@ -243,9 +269,9 @@ final class WindowManager {
         guard optionDismissed != dismissed else { return }
         optionDismissed = dismissed
         for entry in entries {
-            entry.panel.ignoresMouseEvents = dismissed
             entry.panel.animator().alphaValue = dismissed ? 0 : 1
         }
+        updateInteractivity(at: NSEvent.mouseLocation)
     }
 
     // MARK: - Observation
