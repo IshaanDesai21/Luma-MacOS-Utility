@@ -16,6 +16,8 @@ final class AppModel {
     @ObservationIgnored let menuBarManager: MenuBarManager
     @ObservationIgnored let dynamicIslandManager: DynamicIslandManager
     @ObservationIgnored let dockClickWatcher = DockClickWatcher()
+    @ObservationIgnored let nowPlaying: NowPlayingService
+    @ObservationIgnored private var mediaKeyInterceptor: MediaKeyInterceptor?
 
     var islandModel: DynamicIslandModel { dynamicIslandManager.model }
 
@@ -51,12 +53,16 @@ final class AppModel {
         self.moduleServices = services
         self.moduleManager = moduleManager
         self.menuBarManager = MenuBarManager(moduleManager: moduleManager, settings: settings)
+        let nowPlaying = NowPlayingService(spotify: spotify)
+        self.nowPlaying = nowPlaying
         self.dynamicIslandManager = DynamicIslandManager(
-            spotify: spotify,
+            player: nowPlaying,
             settings: settings,
             shelf: services.shelf,
             audio: services.audio,
+            brightness: services.brightness,
             monitor: monitor,
+            downloads: services.downloads,
             moduleManager: moduleManager
         )
     }
@@ -64,6 +70,7 @@ final class AppModel {
     func start() {
         settings.applyAppearance()
         spotify.startMonitoring()
+        nowPlaying.startMonitoring()
         monitor.start()
         moduleServices.downloads.start()
         moduleServices.clipboard.start()
@@ -72,6 +79,30 @@ final class AppModel {
         registerHotkeys()
         observeHotkeys()
         observeDockClick()
+        installMediaKeyInterceptor()
+    }
+
+    /// Replaces the system volume/brightness bezel with the island readout.
+    private func installMediaKeyInterceptor() {
+        let interceptor = MediaKeyInterceptor(
+            settings: settings,
+            audio: moduleServices.audio,
+            brightness: moduleServices.brightness,
+            onVolume: { [weak self] in self?.islandModel.flashVolume() },
+            onBrightness: { [weak self] in self?.islandModel.flashBrightness() }
+        )
+        mediaKeyInterceptor = interceptor
+        observeMediaKeySetting()
+    }
+
+    private func observeMediaKeySetting() {
+        mediaKeyInterceptor?.setEnabled(settings.islandSystemHUD && settings.islandEnabled)
+        withObservationTracking {
+            _ = settings.islandSystemHUD
+            _ = settings.islandEnabled
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.observeMediaKeySetting() }
+        }
     }
 
     private func observeDockClick() {

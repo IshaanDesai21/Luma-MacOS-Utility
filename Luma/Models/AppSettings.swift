@@ -145,6 +145,26 @@ final class AppSettings {
         didSet { defaults.set(islandSolidBlack, forKey: Keys.islandSolidBlack) }
     }
 
+    /// Replace the system volume/brightness bezel with the island's readout.
+    var islandSystemHUD: Bool {
+        didSet { defaults.set(islandSystemHUD, forKey: Keys.islandSystemHUD) }
+    }
+
+    /// Show an indicator in the pod while files are downloading.
+    var islandDownloadProgress: Bool {
+        didSet { defaults.set(islandDownloadProgress, forKey: Keys.islandDownloadProgress) }
+    }
+
+    /// Keep the island invisible until the cursor reaches the notch area.
+    var islandHiddenUntilHover: Bool {
+        didSet { defaults.set(islandHiddenUntilHover, forKey: Keys.islandHiddenUntilHover) }
+    }
+
+    /// Strength of the album-artwork glow around the island (0 = off).
+    var islandGlowAmount: Double {
+        didSet { defaults.set(islandGlowAmount, forKey: Keys.islandGlowAmount) }
+    }
+
     var islandShowWhilePlaying: Bool {
         didSet { defaults.set(islandShowWhilePlaying, forKey: Keys.islandShowWhilePlaying) }
     }
@@ -219,6 +239,10 @@ final class AppSettings {
         static let islandLowBatteryAlert = "island.lowBatteryAlert"
         static let hasCompletedOnboarding = "app.hasCompletedOnboarding"
         static let islandSolidBlack = "island.solidBlack"
+        static let islandSystemHUD = "island.systemHUD"
+        static let islandDownloadProgress = "island.downloadProgress"
+        static let islandHiddenUntilHover = "island.hiddenUntilHover"
+        static let islandGlowAmount = "island.glowAmount"
         static let launchOnSettings = "app.launchOnSettings"
         static let dockClickToHide = "dock.clickToHide"
         static let islandHideShortcut = "shortcut.islandHide"
@@ -284,6 +308,11 @@ final class AppSettings {
         islandLowBatteryAlert = flag(Keys.islandLowBatteryAlert, default: true)
         hasCompletedOnboarding = defaults.bool(forKey: Keys.hasCompletedOnboarding)
         islandSolidBlack = flag(Keys.islandSolidBlack, default: false)
+        islandSystemHUD = flag(Keys.islandSystemHUD, default: true)
+        islandDownloadProgress = flag(Keys.islandDownloadProgress, default: true)
+        islandHiddenUntilHover = flag(Keys.islandHiddenUntilHover, default: false)
+        let storedGlow = defaults.object(forKey: Keys.islandGlowAmount) as? Double
+        islandGlowAmount = storedGlow ?? 0.35
         launchOnSettings = defaults.bool(forKey: Keys.launchOnSettings)
         dockClickToHide = defaults.bool(forKey: Keys.dockClickToHide)
         islandHideShortcut = Self.loadShortcut(defaults, Keys.islandHideShortcut)

@@ -2,17 +2,23 @@ import AppKit
 import SwiftUI
 import Observation
 
-/// Owns the Dynamic Island overlay window.
+/// Owns the Dynamic Island overlay windows, one per display.
 ///
-/// The panel is a fixed-size transparent canvas pinned to the top-center of the
-/// screen. It NEVER animates or resizes — SwiftUI alone draws and animates the
-/// island inside it, so window layout and view layout cannot fight (the source
-/// of every past sizing glitch). Clicks pass through everywhere except the
-/// island's own rect, which the container view hit-tests dynamically.
+/// Each panel is a fixed-size transparent canvas pinned to the top-center of
+/// its screen. Panels NEVER animate or resize; SwiftUI alone draws and animates
+/// the island inside them, so window layout and view layout cannot fight.
+/// Clicks pass through everywhere except the island's own rect, which the
+/// container view hit-tests dynamically.
 @MainActor
 final class WindowManager {
-    private var panel: NSPanel?
-    private var container: IslandContainerView?
+    private struct Entry {
+        let panel: NSPanel
+        let container: IslandContainerView
+        let screenFrame: CGRect
+        let screenInset: CGFloat
+    }
+
+    private var entries: [Entry] = []
     private var model: DynamicIslandModel?
 
     private var localMouseMonitor: Any?
@@ -23,26 +29,20 @@ final class WindowManager {
     private var collapseTask: Task<Void, Never>?
     private var optionDismissed = false
 
-    /// Canvas size — big enough for the largest island at maximum scale plus
-    /// shadow slack. Static so the window frame never has to change.
+    /// Canvas size, big enough for the largest island at maximum scale plus
+    /// shadow slack. Static so panel frames never have to change.
     private let canvasSize = CGSize(width: 640, height: 260)
 
     // MARK: - Lifecycle
 
     func show(model: DynamicIslandModel) {
         self.model = model
-        if panel == nil {
-            createPanel()
-            installContent(model: model)
-        }
-        position()
-        panel?.orderFrontRegardless()
+        rebuildPanels()
         installMonitors()
         beginObserving()
         // Screen info can be stale at launch; settle once the run loop turns.
         Task { @MainActor [weak self] in
-            self?.position()
-            self?.panel?.orderFrontRegardless()
+            self?.rebuildPanels()
         }
     }
 
@@ -50,12 +50,49 @@ final class WindowManager {
         removeMonitors()
         collapseTask?.cancel()
         collapseTask = nil
-        panel?.orderOut(nil)
+        tearDownPanels()
     }
 
-    // MARK: - Panel
+    // MARK: - Panels (one per screen)
 
-    private func createPanel() {
+    private func rebuildPanels() {
+        guard let model else { return }
+        tearDownPanels()
+
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { return }
+
+        // The island's position inside the canvas is shared by every panel;
+        // per-screen differences (notch vs none) are absorbed by each panel's
+        // y-origin below.
+        let referenceInset = screens.map { Self.baseInset(for: $0) }.max() ?? 32
+        model.topInset = max(referenceInset - CGFloat(model.settings.islandVerticalOffset), 0)
+
+        for screen in screens {
+            let inset = max(Self.baseInset(for: screen) - CGFloat(model.settings.islandVerticalOffset), 0)
+            let panel = makePanel()
+            let container = makeContainer(model: model)
+            panel.contentView = container
+
+            let x = screen.frame.midX - canvasSize.width / 2 + CGFloat(model.settings.islandHorizontalOffset)
+            // Shift so the island's top lands exactly `inset` below THIS
+            // screen's top even though the in-canvas layout uses the shared inset.
+            let y = screen.frame.maxY - inset - canvasSize.height + model.topInset
+            panel.setFrame(CGRect(x: x, y: y, width: canvasSize.width, height: canvasSize.height), display: true)
+            panel.alphaValue = optionDismissed ? 0 : 1
+            panel.ignoresMouseEvents = optionDismissed
+            panel.orderFrontRegardless()
+
+            entries.append(Entry(panel: panel, container: container, screenFrame: screen.frame, screenInset: inset))
+        }
+    }
+
+    private func tearDownPanels() {
+        entries.forEach { $0.panel.orderOut(nil) }
+        entries.removeAll()
+    }
+
+    private func makePanel() -> NSPanel {
         let panel = IslandPanel(
             contentRect: CGRect(origin: .zero, size: canvasSize),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -70,17 +107,17 @@ final class WindowManager {
         panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = false
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
-        self.panel = panel
+        return panel
     }
 
-    private func installContent(model: DynamicIslandModel) {
+    private func makeContainer(model: DynamicIslandModel) -> IslandContainerView {
         let container = IslandContainerView(frame: CGRect(origin: .zero, size: canvasSize))
-        container.interactiveRect = { [weak self] in self?.islandRectInView() ?? .zero }
+        container.interactiveRect = { [weak self] in self?.islandRectInCanvas() ?? .zero }
         container.onScroll = { [weak model] delta in model?.scrollVolume(by: delta) }
 
         let root = DynamicIslandView()
             .environment(model)
-            .environment(model.spotify)
+            .environment(model.player)
             .environment(model.settings)
             .ignoresSafeArea()
         let host = NSHostingView(rootView: AnyView(root))
@@ -89,26 +126,14 @@ final class WindowManager {
         host.frame = container.bounds
         host.autoresizingMask = [.width, .height]
         container.addSubview(host)
-
-        panel?.contentView = container
-        self.container = container
-    }
-
-    /// Pins the canvas to the top-center of the target screen (plus the user's
-    /// horizontal offset). Called on screen/setting changes only — never as part
-    /// of presentation changes, and never animated.
-    private func position() {
-        guard let panel, let model, let screen = targetScreen() else { return }
-        model.topInset = topInset(for: screen)
-        let x = screen.frame.midX - canvasSize.width / 2 + CGFloat(model.settings.islandHorizontalOffset)
-        let y = screen.frame.maxY - canvasSize.height
-        panel.setFrame(CGRect(x: x, y: y, width: canvasSize.width, height: canvasSize.height), display: true)
+        return container
     }
 
     // MARK: - Geometry (single source shared by hit-testing and hover)
 
-    /// The island's rect in the panel's view coordinates (origin bottom-left).
-    private func islandRectInView() -> CGRect {
+    /// The island's rect in canvas coordinates (origin bottom-left) — the same
+    /// for every panel, since panels compensate per-screen via their origin.
+    private func islandRectInCanvas() -> CGRect {
         guard let model else { return .zero }
         let layout = model.currentLayout
         return CGRect(
@@ -119,31 +144,37 @@ final class WindowManager {
         )
     }
 
-    /// Same rect in global screen coordinates (for hover monitors).
-    private func islandRectOnScreen() -> CGRect {
-        guard let panel else { return .zero }
-        let local = islandRectInView()
-        return CGRect(
-            x: panel.frame.minX + local.minX,
-            y: panel.frame.minY + local.minY,
-            width: local.width,
-            height: local.height
-        )
+    private func islandRects() -> [CGRect] {
+        let local = islandRectInCanvas()
+        return entries.map { entry in
+            CGRect(
+                x: entry.panel.frame.minX + local.minX,
+                y: entry.panel.frame.minY + local.minY,
+                width: local.width,
+                height: local.height
+            )
+        }
     }
 
-    /// Strip along the top of the screen around the notch that wakes the island.
-    /// The user's activation-area setting scales how far it reaches.
-    private func hoverZone() -> CGRect {
-        guard let panel, let model else { return .zero }
+    /// Hover strips along the top of each screen around the island.
+    private func hoverZones() -> [CGRect] {
+        guard let model else { return [] }
         let factor = CGFloat(model.settings.islandActivationArea)
         let width = max(model.currentLayout.width + 60, 260) * factor
-        let height = model.topInset + 8 + 10 * factor
-        return CGRect(
-            x: panel.frame.midX - width / 2,
-            y: (targetScreen()?.frame.maxY ?? panel.frame.maxY) - height,
-            width: width,
-            height: height
-        )
+        return entries.map { entry in
+            let height = entry.screenInset + 8 + 10 * factor
+            return CGRect(
+                x: entry.panel.frame.midX - width / 2,
+                y: entry.screenFrame.maxY - height,
+                width: width,
+                height: height
+            )
+        }
+    }
+
+    private func isOverIsland(_ point: CGPoint) -> Bool {
+        hoverZones().contains { $0.contains(point) }
+            || islandRects().contains { $0.insetBy(dx: -8, dy: -8).contains(point) }
     }
 
     // MARK: - Hover + modifier monitoring
@@ -178,9 +209,7 @@ final class WindowManager {
 
     private func updateHover(at point: CGPoint) {
         guard let model, !optionDismissed else { return }
-        let over = hoverZone().contains(point) || islandRectOnScreen().insetBy(dx: -8, dy: -8).contains(point)
-
-        if over {
+        if isOverIsland(point) {
             collapseTask?.cancel()
             collapseTask = nil
             if !model.isHovering { model.isHovering = true }
@@ -203,8 +232,7 @@ final class WindowManager {
     /// through. Option elsewhere does nothing.
     private func handleFlags(_ flags: NSEvent.ModifierFlags) {
         let point = NSEvent.mouseLocation
-        let overIsland = hoverZone().contains(point) || islandRectOnScreen().contains(point)
-        if flags.contains(.option), overIsland {
+        if flags.contains(.option), isOverIsland(point) {
             setOptionDismissed(true)
         } else if !flags.contains(.option) {
             setOptionDismissed(false)
@@ -214,8 +242,10 @@ final class WindowManager {
     private func setOptionDismissed(_ dismissed: Bool) {
         guard optionDismissed != dismissed else { return }
         optionDismissed = dismissed
-        panel?.ignoresMouseEvents = dismissed
-        panel?.animator().alphaValue = dismissed ? 0 : 1
+        for entry in entries {
+            entry.panel.ignoresMouseEvents = dismissed
+            entry.panel.animator().alphaValue = dismissed ? 0 : 1
+        }
     }
 
     // MARK: - Observation
@@ -227,7 +257,7 @@ final class WindowManager {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.position() }
+                MainActor.assumeIsolated { self?.rebuildPanels() }
             }
         }
         observeSettings()
@@ -239,7 +269,7 @@ final class WindowManager {
             _ = self?.model?.settings.islandVerticalOffset
         } onChange: { [weak self] in
             Task { @MainActor in
-                self?.position()
+                self?.rebuildPanels()
                 self?.observeSettings()
             }
         }
@@ -247,18 +277,9 @@ final class WindowManager {
 
     // MARK: - Screen
 
-    private func topInset(for screen: NSScreen) -> CGFloat {
-        // Below the notch on notched Macs; just under the top edge otherwise.
-        let base = screen.safeAreaInsets.top > 0 ? screen.safeAreaInsets.top : 4
-        let offset = CGFloat(model?.settings.islandVerticalOffset ?? 0)
-        return max(base - offset, 0)
-    }
-
-    private func targetScreen() -> NSScreen? {
-        // NSScreen.main can be nil early in launch; always fall back to a real screen.
-        NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 })
-            ?? NSScreen.main
-            ?? NSScreen.screens.first
+    /// Below the notch on notched displays; just under the top edge otherwise.
+    private static func baseInset(for screen: NSScreen) -> CGFloat {
+        screen.safeAreaInsets.top > 0 ? screen.safeAreaInsets.top : 4
     }
 
     deinit {
@@ -277,8 +298,8 @@ private final class IslandPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// Content view for the canvas: passes clicks through except over the island,
-/// so the invisible parts of the big fixed window never block the menu bar or
+/// Content view for a canvas: passes clicks through except over the island, so
+/// the invisible parts of the big fixed window never block the menu bar or
 /// anything behind them.
 final class IslandContainerView: NSView {
     var interactiveRect: () -> CGRect = { .zero }

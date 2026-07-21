@@ -45,17 +45,36 @@ echo "▸ Staging disk image…"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 cp -R "$APP_PATH" "$STAGE/"
-ln -s /Applications "$STAGE/Applications"
 
 echo "▸ Creating ${DMG}"
 rm -f "$DMG"
-hdiutil create \
-  -volname "$VOLUME" \
-  -srcfolder "$STAGE" \
-  -fs HFS+ \
-  -format UDZO \
-  -ov \
-  "$DMG"
+
+BACKGROUND="$ROOT/scripts/dmg-background.png"
+if command -v create-dmg >/dev/null 2>&1 && [ -f "$BACKGROUND" ]; then
+  # Styled window: custom background, positioned icons, drag arrow.
+  create-dmg \
+    --volname "$VOLUME" \
+    --background "$BACKGROUND" \
+    --window-pos 200 120 \
+    --window-size 660 440 \
+    --icon-size 128 \
+    --icon "$APP" 165 210 \
+    --hide-extension "$APP" \
+    --app-drop-link 495 210 \
+    --no-internet-enable \
+    "$DMG" \
+    "$STAGE"
+else
+  # Fallback: plain DMG with an Applications shortcut.
+  ln -s /Applications "$STAGE/Applications"
+  hdiutil create \
+    -volname "$VOLUME" \
+    -srcfolder "$STAGE" \
+    -fs HFS+ \
+    -format UDZO \
+    -ov \
+    "$DMG"
+fi
 
 echo "▸ Zipping app (alternative download)…"
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$BUILD/Luma.zip"

@@ -97,6 +97,19 @@ struct DynamicIslandPageView: View {
                 }
             }
             VStack(alignment: .leading, spacing: 4) {
+                LabeledContent("Artwork glow", value: settings.islandGlowAmount < 0.02 ? "Off" : "\(Int(settings.islandGlowAmount * 100))%")
+                Slider(value: $settings.islandGlowAmount, in: 0...0.8) {
+                    Text("Artwork glow")
+                } minimumValueLabel: {
+                    Text("Off").font(.caption2).foregroundStyle(.secondary)
+                } maximumValueLabel: {
+                    Text("Bright").font(.caption2).foregroundStyle(.secondary)
+                }
+                Text("A soft halo around the island tinted from the current album art.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 4) {
                 LabeledContent("Activation area", value: "\(Int(settings.islandActivationArea * 100))%")
                 Slider(value: $settings.islandActivationArea, in: 0.5...2.5) {
                     Text("Activation area")
@@ -220,6 +233,27 @@ struct DynamicIslandPageView: View {
                 title: "Solid black island",
                 subtitle: "Classic iPhone look — pure black instead of Liquid Glass.",
                 isOn: $settings.islandSolidBlack
+            )
+            Divider().padding(.leading, 52)
+            featureRow(
+                icon: "rectangle.on.rectangle.slash",
+                title: "Replace system volume and brightness overlay",
+                subtitle: "Volume and brightness keys show a sleek readout in the island instead of the macOS bezel.",
+                isOn: $settings.islandSystemHUD
+            )
+            Divider().padding(.leading, 52)
+            featureRow(
+                icon: "arrow.down.circle",
+                title: "Download indicator",
+                subtitle: "A blue pulse in the pod while files are downloading.",
+                isOn: $settings.islandDownloadProgress
+            )
+            Divider().padding(.leading, 52)
+            featureRow(
+                icon: "eye.slash",
+                title: "Hide until hover",
+                subtitle: "The island stays invisible until your cursor reaches the notch area, then the full card appears.",
+                isOn: $settings.islandHiddenUntilHover
             )
         }
         .background(settings.glassMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))

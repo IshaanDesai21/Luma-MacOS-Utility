@@ -13,14 +13,24 @@ final class DynamicIslandManager {
     @ObservationIgnored private let moduleManager: ModuleManager
 
     init(
-        spotify: SpotifyService,
+        player: NowPlayingService,
         settings: AppSettings,
         shelf: FileShelf,
         audio: AudioController,
+        brightness: BrightnessController,
         monitor: SystemMonitor,
+        downloads: DownloadsService,
         moduleManager: ModuleManager
     ) {
-        self.model = DynamicIslandModel(spotify: spotify, settings: settings, shelf: shelf, audio: audio, monitor: monitor)
+        self.model = DynamicIslandModel(
+            player: player,
+            settings: settings,
+            shelf: shelf,
+            audio: audio,
+            brightness: brightness,
+            monitor: monitor,
+            downloads: downloads
+        )
         self.windowManager = WindowManager()
         self.settings = settings
         self.moduleManager = moduleManager

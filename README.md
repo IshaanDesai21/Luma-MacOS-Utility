@@ -2,63 +2,8 @@
 
 A native macOS utility that gives your Mac a **Dynamic Island**, a fully
 customizable **menu bar**, smarter **Dock** behavior, and one-click **workspace**
-switching — all in Liquid Glass. SwiftUI + AppKit, Apple Silicon, macOS 15+.
-No Electron, no web tech.
-
-## Features
-
-### 🏝 Dynamic Island
-A small glass pod under the notch that springs open into a full media card when
-you hover near it. Everything is a toggle or slider — customize the notch to
-taste:
-
-- **Now playing** (Spotify): title, artist, artwork, next/previous, play/pause
-- **Seek bar** — scrub the current song right from the notch
-- **Music visualizer** — animated equalizer bars in the pod while music plays
-- **File shelf** — drop files onto the island to hold them; drag them out later
-- **Camera & mic activity** — iOS-style green/orange dots when any app uses them
-- **Charging indicator** — green ⚡ while plugged in
-- **Low battery warning** — pulsing red battery under 15% when unplugged
-- **Clock when idle** — show the time when nothing is playing
-- **Scroll to change volume** — scroll on the pod, get a mini volume readout
-- **Click to play / pause** — tap the pod to toggle playback
-- **Unlock animation** — padlock-open flash when your Mac unlocks
-- **Pulse on track change** — the pod bounces when the song changes
-- **Solid black mode** — classic iPhone-style pure-black island instead of glass
-- Sliders for **position** (vertical + horizontal), **size**, and the
-  **activation area** (how close the cursor must get before it opens)
-- Hold **⌥ Option** over the island to hide it and click through
-
-### 📊 Menu Bar
-A modular strip you design yourself:
-
-- **Live preview editor** — drag chips to reorder; the real menu bar follows
-- **⋯ overflow folder** — drag modules past the divider line to tuck them
-  behind a single "everything else" button
-- **Compact mode** per module (icon only) to save space
-- **One-click actions** — the mic icon toggles mute instantly; the language
-  icon switches keyboard layout instantly (with a HUD)
-- **Collapse mode** — everything behind one Luma icon and a glass popover
-- 13 modules: Clock · Calendar · Timer · Spotify · Microphone · Keyboard ·
-  File Shelf · Battery · CPU · Memory · Network · Downloads · Clipboard
-
-### 🚢 Dock
-- **Click the active app's Dock icon to hide it** (like Supercharge) — the app
-  disappears and whatever's behind it comes forward; click again to bring it back
-- Toggle the real Dock settings from Luma: autohide, magnification, size,
-  position, minimize effect, indicators, recents…
-
-### 🗂 Workspaces
-- Save any number of Dock layouts — snapshot the live Dock or compose one in
-  the visual builder (searchable app grid + live Dock preview)
-- Switch the entire Dock with one click
-
-### ⚙️ Everything else
-- **Liquid Glass slider** — from water-clear "very liquid" to fully frosted,
-  applied across the app and the island, with a live preview swatch
-- First-run **setup assistant** to dial in your notch in seconds
-- Global keyboard shortcuts (hide island, mute mic)
-- Launch at login, animation speed, light/dark/auto appearance
+switching — all in Liquid Glass. SwiftUI + AppKit, universal binary
+(Apple Silicon + Intel), macOS 14 Sonoma or newer. No Electron, no web tech.
 
 ## Install
 
@@ -78,6 +23,71 @@ First launch only — the app isn't notarized, so macOS asks once:
 Luma walks you through a quick setup on first open. For the Dock
 click-to-hide feature, allow **Accessibility** when prompted; Spotify control
 asks for **Automation** the first time.
+
+## Features
+
+### Dynamic Island
+A small glass pod under the notch that springs open into a full media card when
+you hover near it. Everything is a toggle or slider — customize the notch to
+taste:
+
+- **Now playing** (Spotify and Apple Music): title, artist, artwork,
+  next/previous, play/pause, with controls routed to whichever app is playing
+- **Seek bar** — scrub the current song right from the notch
+- **System overlay replacement** — volume and brightness keys show a sleek
+  readout in the island instead of the macOS bezel
+- **Artwork glow** — a soft halo around the island tinted from the album art,
+  with a slider for how strong it glows
+- **Download indicator** — a blue pulse in the pod while files are downloading
+- **Shows on every display** — the island appears under the notch (or top
+  center) of all connected monitors
+- **Hide until hover** — optionally keep the island invisible until the cursor
+  reaches the notch, then the full card appears
+- **Music visualizer** — animated equalizer bars in the pod while music plays
+- **File shelf** — drop files onto the island to hold them; drag them out later
+- **Camera & mic activity** — iOS-style green/orange dots when any app uses them
+- **Charging indicator** — green bolt while plugged in
+- **Low battery warning** — pulsing red battery under 15% when unplugged
+- **Clock when idle** — show the time when nothing is playing
+- **Scroll to change volume** — scroll on the pod, get a mini volume readout
+- **Click to play / pause** — tap the pod to toggle playback
+- **Unlock animation** — padlock-open flash when your Mac unlocks
+- **Pulse on track change** — the pod bounces when the song changes
+- **Solid black mode** — classic iPhone-style pure-black island instead of glass
+- Sliders for **position** (vertical + horizontal), **size**, and the
+  **activation area** (how close the cursor must get before it opens)
+- Hold **Option** over the island to hide it and click through
+
+### Menu Bar
+A modular strip you design yourself:
+
+- **Live preview editor** — drag chips to reorder; the real menu bar follows
+- **Overflow folder** — drag modules past the divider line to tuck them
+  behind a single "everything else" button
+- **Compact mode** per module (icon only) to save space
+- **One-click actions** — the mic icon toggles mute instantly; the language
+  icon switches keyboard layout instantly (with a HUD)
+- **Collapse mode** — everything behind one Luma icon and a glass popover
+- 13 modules: Clock · Calendar · Timer · Spotify · Microphone · Keyboard ·
+  File Shelf · Battery · CPU · Memory · Network · Downloads · Clipboard
+
+### Dock
+- **Click the active app's Dock icon to hide it** (like Supercharge) — the app
+  disappears and whatever's behind it comes forward; click again to bring it back
+- Toggle the real Dock settings from Luma: autohide, magnification, size,
+  position, minimize effect, indicators, recents…
+
+### Workspaces
+- Save any number of Dock layouts — snapshot the live Dock or compose one in
+  the visual builder (searchable app grid + live Dock preview)
+- Switch the entire Dock with one click
+
+### Everything else
+- **Liquid Glass slider** — from water-clear "very liquid" to fully frosted,
+  applied across the app and the island, with a live preview swatch
+- First-run **setup assistant** to dial in your notch in seconds
+- Global keyboard shortcuts (hide island, mute mic)
+- Launch at login, animation speed, light/dark/auto appearance
 
 ## Build from source
 

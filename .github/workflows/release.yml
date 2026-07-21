@@ -35,6 +35,9 @@ jobs:
           xcodebuild -version
           xcodebuild -showsdks | grep macosx || true
 
+      - name: Install create-dmg (styled installer window)
+        run: brew install create-dmg || true
+
       - name: Build DMG + app zip
         run: |
           set -o pipefail
@@ -84,7 +87,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: Luma — latest build
+          name: Luma Latest Build
           prerelease: true
           files: |
             build/Luma.dmg

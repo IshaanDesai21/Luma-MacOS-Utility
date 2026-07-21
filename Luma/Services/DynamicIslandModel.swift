@@ -40,27 +40,33 @@ final class DynamicIslandModel {
     @ObservationIgnored private var unlockResetTask: Task<Void, Never>?
     @ObservationIgnored private var unlockObserver: NSObjectProtocol?
 
-    @ObservationIgnored let spotify: SpotifyService
+    @ObservationIgnored let player: NowPlayingService
     @ObservationIgnored let settings: AppSettings
     @ObservationIgnored let shelf: FileShelf
     @ObservationIgnored let audio: AudioController
+    @ObservationIgnored let brightness: BrightnessController
     @ObservationIgnored let monitor: SystemMonitor
+    @ObservationIgnored let downloads: DownloadsService
 
     /// Camera/mic/charging state shown in the resting pod.
     @ObservationIgnored let sensors = SensorActivityService()
 
     init(
-        spotify: SpotifyService,
+        player: NowPlayingService,
         settings: AppSettings,
         shelf: FileShelf,
         audio: AudioController,
-        monitor: SystemMonitor
+        brightness: BrightnessController,
+        monitor: SystemMonitor,
+        downloads: DownloadsService
     ) {
-        self.spotify = spotify
+        self.player = player
         self.settings = settings
         self.shelf = shelf
         self.audio = audio
+        self.brightness = brightness
         self.monitor = monitor
+        self.downloads = downloads
         unlockObserver = DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("com.apple.screenIsUnlocked"),
             object: nil,
@@ -82,10 +88,14 @@ final class DynamicIslandModel {
 
     // MARK: - Scroll-to-volume
 
-    /// True briefly after a scroll so the pod can show the volume readout.
+    /// True briefly after a volume change so the pod can show the readout.
     var isVolumeFlashing = false
 
+    /// True briefly after a brightness change (system HUD replacement).
+    var isBrightnessFlashing = false
+
     @ObservationIgnored private var volumeFlashTask: Task<Void, Never>?
+    @ObservationIgnored private var brightnessFlashTask: Task<Void, Never>?
     @ObservationIgnored private var scrollAccumulator: CGFloat = 0
 
     /// Scrolling over the pod nudges the system volume.
@@ -102,13 +112,25 @@ final class DynamicIslandModel {
         flashVolume()
     }
 
-    private func flashVolume() {
+    func flashVolume() {
         isVolumeFlashing = true
+        isBrightnessFlashing = false
         volumeFlashTask?.cancel()
         volumeFlashTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.2))
             guard !Task.isCancelled else { return }
             self?.isVolumeFlashing = false
+        }
+    }
+
+    func flashBrightness() {
+        isBrightnessFlashing = true
+        isVolumeFlashing = false
+        brightnessFlashTask?.cancel()
+        brightnessFlashTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.2))
+            guard !Task.isCancelled else { return }
+            self?.isBrightnessFlashing = false
         }
     }
 
@@ -131,8 +153,14 @@ final class DynamicIslandModel {
 
     var presentation: Presentation {
         if isDropTargeting || justDropped { return .expanded }
-        if settings.islandRevealOnHover, isHovering { return .expanded }
+        if settings.islandRevealOnHover || settings.islandHiddenUntilHover, isHovering { return .expanded }
         return .peek
+    }
+
+    /// True when the island should be invisible at rest (hidden-until-hover
+    /// mode): the hover strip still works, everything else disappears.
+    var isTuckedAway: Bool {
+        settings.islandHiddenUntilHover && presentation == .peek
     }
 
     // MARK: - Geometry

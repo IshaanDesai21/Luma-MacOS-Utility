@@ -10,6 +10,7 @@ struct LumaApp: App {
                 .environment(appDelegate.model)
                 .environment(appDelegate.model.settings)
                 .environment(appDelegate.model.spotify)
+                .environment(appDelegate.model.nowPlaying)
                 .environment(appDelegate.model.workspaceStore)
                 .environment(appDelegate.model.appCatalog)
                 .environment(appDelegate.model.moduleManager)
