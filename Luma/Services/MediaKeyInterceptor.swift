@@ -5,8 +5,20 @@ import Observation
 /// its own elegant readout instead of the system's square bezel. The keys are
 /// consumed (macOS never draws its HUD) and the adjustment is performed by
 /// Luma. If interception is unavailable (no Accessibility) or an adjustment
-/// can't be made (e.g. brightness on some external displays), the key passes
-/// through untouched so nothing ever breaks.
+/// can't be made (e.g. brightness on some external displays, no output
+/// device), the key passes through untouched so nothing ever breaks.
+///
+/// Permissions: an *active* CGEvent tap (`.defaultTap`, required to consume
+/// events) is gated by the Accessibility TCC grant - System Settings > Privacy
+/// & Security > Accessibility. No entitlements are involved: the app is not
+/// sandboxed, hardened runtime is fine, and listen-only Input Monitoring is
+/// NOT sufficient because it cannot swallow the event (the bezel would still
+/// appear). The prompt is requested when the feature is enabled; until the
+/// user grants it, a retry loop keeps trying and the keys behave natively.
+///
+/// Everything here is public API: `CGEvent.tapCreate`, `NSEvent(cgEvent:)`
+/// parsing of `NX_SYSDEFINED` (type 14, subtype 8) media-key events, and
+/// CoreAudio / DisplayServices-backed controllers for the actual adjustment.
 @MainActor
 @Observable
 final class MediaKeyInterceptor {
@@ -124,17 +136,22 @@ final class MediaKeyInterceptor {
         let keyCode = Int((nsEvent.data1 & 0xFFFF0000) >> 16)
         let keyFlags = nsEvent.data1 & 0xFFFF
         let isKeyDown = ((keyFlags & 0xFF00) >> 8) == 0xA
+        // Shift+Option gives quarter steps, matching macOS exactly.
+        let fine = event.flags.contains(.maskShift) && event.flags.contains(.maskAlternate)
 
         switch keyCode {
         case Self.keySoundUp, Self.keySoundDown, Self.keyMute:
-            // Consume both down and up so macOS never shows its bezel; act on down.
-            if isKeyDown { handleVolumeKey(keyCode) }
+            // Leave the keys to macOS when there is nothing we can control.
+            guard audio.hasOutputDevice else { return Unmanaged.passUnretained(event) }
+            // Consume both down and up so macOS never shows its bezel; act on
+            // down (repeats arrive as further key-downs, so holding works).
+            if isKeyDown { handleVolumeKey(keyCode, fine: fine) }
             return nil
 
         case Self.keyBrightnessUp, Self.keyBrightnessDown:
             // Only take over when we can actually set brightness on this display.
             guard brightness.isAvailable else { return Unmanaged.passUnretained(event) }
-            if isKeyDown { handleBrightnessKey(keyCode) }
+            if isKeyDown { handleBrightnessKey(keyCode, fine: fine) }
             return nil
 
         default:
@@ -142,20 +159,22 @@ final class MediaKeyInterceptor {
         }
     }
 
-    private func handleVolumeKey(_ keyCode: Int) {
+    private func handleVolumeKey(_ keyCode: Int, fine: Bool) {
+        let step = fine ? Self.volumeStep / 4 : Self.volumeStep
         switch keyCode {
         case Self.keyMute:
             _ = audio.toggleMute()
         case Self.keySoundUp:
-            audio.setVolume(min(audio.volume + Self.volumeStep, 1))
+            audio.setVolume(min(audio.volume + step, 1))
         default:
-            audio.setVolume(max(audio.volume - Self.volumeStep, 0))
+            audio.setVolume(max(audio.volume - step, 0))
         }
         onVolume()
     }
 
-    private func handleBrightnessKey(_ keyCode: Int) {
-        let delta: Float = keyCode == Self.keyBrightnessUp ? Self.brightnessStep : -Self.brightnessStep
+    private func handleBrightnessKey(_ keyCode: Int, fine: Bool) {
+        let step = fine ? Self.brightnessStep / 4 : Self.brightnessStep
+        let delta: Float = keyCode == Self.keyBrightnessUp ? step : -step
         brightness.setBrightness(min(max(brightness.brightness + delta, 0), 1))
         onBrightness()
     }

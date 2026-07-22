@@ -15,6 +15,10 @@ final class AudioController {
 
     private var device: AudioDevice? { AudioDevice.defaultDevice(input: false) }
 
+    /// Whether there is an output device we can actually control. When false,
+    /// callers should leave the hardware keys to macOS.
+    var hasOutputDevice: Bool { device != nil }
+
     @ObservationIgnored private var externalChangeHandler: (@MainActor () -> Void)?
     @ObservationIgnored private var listenedDevice: AudioDevice?
     @ObservationIgnored private var deviceListener: AudioObjectPropertyListenerBlock?
