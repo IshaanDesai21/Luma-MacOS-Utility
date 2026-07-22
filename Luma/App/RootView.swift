@@ -36,6 +36,17 @@ struct RootView: View {
             .navigationSplitViewColumnWidth(min: 200, ideal: 216, max: 260)
             .listStyle(.sidebar)
             .navigationTitle("Luma")
+            .safeAreaInset(edge: .bottom) {
+                HStack(spacing: 5) {
+                    Image(systemName: "moon.stars.fill")
+                        .font(.system(size: 9))
+                    Text("Luma \(Bundle.main.lumaVersion)")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+            }
         } detail: {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
