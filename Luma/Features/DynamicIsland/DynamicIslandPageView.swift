@@ -11,7 +11,7 @@ struct DynamicIslandPageView: View {
         @Bindable var settings = settings
 
         ScrollView {
-            VStack(spacing: 28) {
+            VStack(alignment: .leading, spacing: 24) {
                 PageHeader(
                     title: "Dynamic Island",
                     subtitle: "A Liquid Glass overlay at the notch. Move the cursor to the top to reveal it."
@@ -20,13 +20,13 @@ struct DynamicIslandPageView: View {
                 preview
 
                 behaviorCard(settings: settings)
-                    .frame(maxWidth: 440)
+                    .frame(maxWidth: 460)
 
                 positionCard(settings: settings)
-                    .frame(maxWidth: 440)
+                    .frame(maxWidth: 460)
 
                 featuresCard(settings: settings)
-                    .frame(maxWidth: 440)
+                    .frame(maxWidth: 460)
 
                 if let shortcut = settings.islandHideShortcut {
                     Label("Press \(shortcut.display) to hide the island and click through.", systemImage: "keyboard")
@@ -35,21 +35,30 @@ struct DynamicIslandPageView: View {
                 }
             }
             .padding(40)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: 560, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
         .navigationTitle("Dynamic Island")
     }
 
     private var preview: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.quaternary.opacity(0.35))
-            DynamicIslandView(forcedPresentation: .expanded)
-                .allowsHitTesting(false)
-                .frame(width: 384, height: 100)
+        GeometryReader { geo in
+            // Scale the (possibly large) expanded island down to fit the box so
+            // big island sizes never clip the sides of the preview.
+            let base = appModel.islandModel.layout(for: .expanded)
+            let fit = min(1, (geo.size.width - 28) / max(base.width, 1))
+            ZStack {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.quaternary.opacity(0.35))
+                DynamicIslandView(forcedPresentation: .expanded)
+                    .allowsHitTesting(false)
+                    .frame(width: base.width, height: base.height)
+                    .scaleEffect(fit)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
-        .frame(maxWidth: 440)
-        .frame(height: 150)
+        .frame(maxWidth: 460)
+        .frame(height: 180)
     }
 
     private func behaviorCard(settings: AppSettings) -> some View {
@@ -265,7 +274,7 @@ struct DynamicIslandPageView: View {
                         .foregroundStyle(.orange)
                         .font(.system(size: 11))
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("macOS will keep showing its own overlay until Luma has Accessibility permission. If you rebuilt or updated the app, remove the old Luma entry there and add it again.")
+                        Text("Seeing two overlays? Luma can't hide the macOS one until it has Accessibility permission. Toggle Luma OFF then ON in the list below. Note: running from Xcode changes the app each build, so the grant often won't stick — install the built app for this to work reliably.")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                         Button("Open Accessibility Settings") {
@@ -283,9 +292,27 @@ struct DynamicIslandPageView: View {
             featureRow(
                 icon: "calendar",
                 title: "Calendar",
-                subtitle: "Show today's schedule beside the media card (uses your system Calendar accounts).",
+                subtitle: "Show today's schedule beside the media card. Scroll the dates to browse other days.",
                 isOn: $settings.islandShowCalendar
             )
+            if settings.islandShowCalendar {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("To show Google Calendar events, add your Google account in System Settings → Internet Accounts. Luma picks it up automatically — no sign-in needed here.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Button("Open Internet Accounts") {
+                            appModel.islandModel.calendar.openInternetAccounts()
+                        }
+                        .controlSize(.small)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+            }
             Divider().padding(.leading, 52)
             featureRow(
                 icon: "arrow.down.circle",

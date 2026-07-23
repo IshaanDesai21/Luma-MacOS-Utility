@@ -422,9 +422,18 @@ struct DynamicIslandView: View {
             weekStrip
             eventsList
         }
-        .frame(maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .contentShape(Rectangle())
-        .onTapGesture { model.calendar.openCalendarApp() }
+        // Scroll (either axis) to move through days; click opens Calendar. Only
+        // when access is granted, so it never covers the "Allow access" button.
+        .overlay {
+            if model.calendar.access == .granted {
+                CalendarScrollCatcher(
+                    onStep: { step in model.calendar.shift(days: step) },
+                    onClick: { model.calendar.openCalendarApp() }
+                )
+            }
+        }
     }
 
     private var weekStrip: some View {
@@ -436,16 +445,18 @@ struct DynamicIslandView: View {
                 .padding(.trailing, 6)
             ForEach(model.calendar.weekDays, id: \.self) { day in
                 let isToday = Calendar.current.isDate(day, inSameDayAs: today)
+                let isFocused = Calendar.current.isDate(day, inSameDayAs: model.calendar.focusedDate)
                 VStack(spacing: 3) {
                     Text(weekdayLabel(day))
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(isToday ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                     Text("\(Calendar.current.component(.day, from: day))")
-                        .font(.system(size: 12, weight: isToday ? .bold : .regular))
-                        .foregroundStyle(isToday ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                        .font(.system(size: 12, weight: (isFocused || isToday) ? .bold : .regular))
+                        .foregroundStyle(isFocused ? AnyShapeStyle(.white) : (isToday ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary)))
                         .frame(width: 22, height: 22)
                         .background {
-                            if isToday { Circle().fill(.tint) }
+                            if isFocused { Circle().fill(.tint) }
+                            else if isToday { Circle().strokeBorder(.tint, lineWidth: 1) }
                         }
                 }
                 .frame(maxWidth: .infinity)
@@ -459,15 +470,8 @@ struct DynamicIslandView: View {
             calendarHint("Allow calendar access", system: "calendar.badge.exclamationmark") {
                 model.calendar.requestAccessAgain()
             }
-        } else if model.calendar.todaysEvents.isEmpty {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("No events today")
-                    .font(.system(size: 14, weight: .semibold))
-                Text("Enjoy your free time!")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
+            // When there are no events, show nothing at all (just the week strip).
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(model.calendar.todaysEvents) { event in
                     HStack(spacing: 7) {
@@ -484,6 +488,7 @@ struct DynamicIslandView: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
 
@@ -502,7 +507,7 @@ struct DynamicIslandView: View {
 
     private var monthLabel: String {
         let f = DateFormatter(); f.dateFormat = "MMM"
-        return f.string(from: nowDate)
+        return f.string(from: model.calendar.focusedDate)
     }
 
     private func weekdayLabel(_ day: Date) -> String {
@@ -673,5 +678,48 @@ struct DynamicIslandView: View {
 
         guard let averaged = tiny.colorAt(x: 0, y: 0) else { return nil }
         return Color(nsColor: averaged)
+    }
+}
+
+/// Captures scroll (either axis) over the calendar to page through days, and a
+/// click to open the Calendar app. Lives as an overlay so the SwiftUI calendar
+/// content still draws underneath.
+private struct CalendarScrollCatcher: NSViewRepresentable {
+    let onStep: (Int) -> Void
+    let onClick: () -> Void
+
+    func makeNSView(context: Context) -> ScrollCatchView {
+        let view = ScrollCatchView()
+        view.onStep = onStep
+        view.onClick = onClick
+        return view
+    }
+
+    func updateNSView(_ nsView: ScrollCatchView, context: Context) {
+        nsView.onStep = onStep
+        nsView.onClick = onClick
+    }
+
+    final class ScrollCatchView: NSView {
+        var onStep: (Int) -> Void = { _ in }
+        var onClick: () -> Void = {}
+        private var accumulated: CGFloat = 0
+        private let pointsPerDay: CGFloat = 14
+
+        override func scrollWheel(with event: NSEvent) {
+            // Use whichever axis the user moved more; both page through dates.
+            let horizontal = abs(event.scrollingDeltaX) >= abs(event.scrollingDeltaY)
+            let delta = horizontal ? event.scrollingDeltaX : -event.scrollingDeltaY
+            accumulated += delta
+            guard abs(accumulated) >= pointsPerDay else { return }
+            let steps = Int((accumulated / pointsPerDay).rounded(.towardZero))
+            accumulated -= CGFloat(steps) * pointsPerDay
+            if steps != 0 { onStep(steps) }
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            // A simple click (not a drag) opens Calendar.
+            onClick()
+        }
     }
 }

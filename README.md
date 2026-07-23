@@ -34,8 +34,9 @@ taste:
 - **Now playing** (Spotify, Apple Music, and system audio): title, artist,
   artwork, next/previous, play/pause, routed to whichever source is playing;
   pressing play with nothing open launches Spotify
-- **Calendar** column with today's schedule and a week strip, from your system
-  Calendar accounts (Apple, Google, Exchange); click to open Calendar
+- **Calendar** column with the day's schedule and a week strip you can scroll to
+  browse other days; reads your system Calendar accounts (Apple, Google via
+  System Settings → Internet Accounts, Exchange); click to open Calendar
 - **Tabbed expanded card** with a Home view (media + calendar) and a Shelf tab
   you can drop files onto
 - **Seek bar** — scrub the current song right from the notch
@@ -94,6 +95,8 @@ A modular strip you design yourself:
 - **Liquid Glass slider** — from water-clear "very liquid" to fully frosted,
   applied across the app and the island, with a live preview swatch
 - First-run **setup assistant** to dial in your notch in seconds
+- Runs in the background: close the window and the island and menu bar stay
+  live; reopen from the Dock icon
 - Global keyboard shortcuts (hide island, mute mic)
 - Launch at login, animation speed, light/dark/auto appearance
 

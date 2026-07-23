@@ -21,7 +21,17 @@ final class DownloadsService {
         .homeDirectoryForCurrentUser.appending(path: "Downloads", directoryHint: .isDirectory)
     private let partialExtensions: Set<String> = ["download", "crdownload", "part", "partial", "opdownload"]
 
+    /// Files modified at/before this are hidden from the list (Clear button).
+    /// This only clears the display; the files themselves stay in Downloads.
+    @ObservationIgnored private var clearedBefore: Date?
+
     var activeCount: Int { items.filter(\.inProgress).count }
+
+    /// Hides the current list; new downloads still appear as they arrive.
+    func clearList() {
+        clearedBefore = Date()
+        items = []
+    }
 
     func start(interval: Duration = .seconds(2)) {
         guard task == nil else { return }
@@ -60,7 +70,10 @@ final class DownloadsService {
                 sizeBytes: Int64(values?.fileSize ?? 0),
                 inProgress: inProgress
             )
-            dated.append((item, values?.contentModificationDate ?? .distantPast))
+            let modified = values?.contentModificationDate ?? .distantPast
+            // Respect a Clear: only show items newer than the cleared cutoff.
+            if let clearedBefore, modified <= clearedBefore { continue }
+            dated.append((item, modified))
         }
         dated.sort { $0.1 > $1.1 }
         items = Array(dated.prefix(8)).map(\.0)

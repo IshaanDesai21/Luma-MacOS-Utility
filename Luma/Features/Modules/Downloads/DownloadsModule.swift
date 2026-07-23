@@ -15,6 +15,9 @@ final class DownloadsModule: ModuleObject, Module {
         AnyView(Popover(downloads: services.downloads))
     }
 
+    // The popover styles itself (header + Clear button), so skip generic chrome.
+    var menuBarPopoverUsesChrome: Bool { false }
+
     private struct Chip: View {
         let downloads: DownloadsService
         var body: some View {
@@ -28,25 +31,44 @@ final class DownloadsModule: ModuleObject, Module {
     private struct Popover: View {
         let downloads: DownloadsService
         var body: some View {
-            VStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Downloads")
+                        .font(.system(size: 12, weight: .semibold))
+                    Spacer()
+                    if !downloads.items.isEmpty {
+                        Button("Clear") { downloads.clearList() }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.tint)
+                    }
+                }
+
                 if downloads.items.isEmpty {
                     Text("No recent downloads")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
-                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 8)
                 } else {
-                    ForEach(downloads.items) { item in
-                        row(item)
+                    VStack(spacing: 6) {
+                        ForEach(downloads.items) { item in
+                            row(item)
+                        }
                     }
+                    Text("Tip: drag a file out to move or copy it.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
                 }
             }
-            .frame(width: 260)
+            .padding(14)
+            .frame(width: 280)
         }
 
         private func row(_ item: DownloadsService.Item) -> some View {
             HStack(spacing: 8) {
                 Image(nsImage: downloads.icon(for: item))
-                    .resizable().frame(width: 22, height: 22)
+                    .resizable().frame(width: 26, height: 26)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(item.name).font(.system(size: 12)).lineLimit(1)
                     HStack(spacing: 4) {
@@ -67,8 +89,17 @@ final class DownloadsModule: ModuleObject, Module {
                     .buttonStyle(.plain).help("Open")
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .padding(.vertical, 6)
             .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            // Drag the actual file out of the popover (unless still downloading).
+            .draggable(item.url) {
+                HStack(spacing: 6) {
+                    Image(nsImage: downloads.icon(for: item)).resizable().frame(width: 20, height: 20)
+                    Text(item.name).font(.system(size: 11)).lineLimit(1)
+                }
+                .padding(6)
+            }
         }
     }
 }

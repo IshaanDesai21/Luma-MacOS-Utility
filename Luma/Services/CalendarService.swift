@@ -21,14 +21,43 @@ final class CalendarService {
     private(set) var todaysEvents: [Event] = []
     private(set) var access: Access = .unknown
 
+    /// The day the strip is centered on and whose events are listed. Starts at
+    /// today; scrolling the strip moves it.
+    private(set) var focusedDate = Calendar.current.startOfDay(for: Date())
+
     @ObservationIgnored private let store = EKEventStore()
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
-    /// The seven days shown in the strip: three before today through three after.
+    /// Seven days centered on the focused day.
     var weekDays: [Date] {
         let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        return (-2...4).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
+        return (-3...3).compactMap { calendar.date(byAdding: .day, value: $0, to: focusedDate) }
+    }
+
+    var isFocusedToday: Bool {
+        Calendar.current.isDateInToday(focusedDate)
+    }
+
+    /// Moves the focused day (from scrolling the strip) and reloads its events.
+    func shift(days: Int) {
+        guard days != 0 else { return }
+        let calendar = Calendar.current
+        guard let next = calendar.date(byAdding: .day, value: days, to: focusedDate) else { return }
+        focusedDate = next
+        reload()
+    }
+
+    func focusToday() {
+        focusedDate = Calendar.current.startOfDay(for: Date())
+        reload()
+    }
+
+    /// Opens System Settings > Internet Accounts so the user can add a Google
+    /// (or other) account; EventKit then shows those events with no OAuth here.
+    func openInternetAccounts() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Internet-Accounts-Settings.extension") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     func start() {
@@ -78,12 +107,14 @@ final class CalendarService {
     func reload() {
         guard access == .granted else { return }
         let calendar = Calendar.current
-        let start = calendar.startOfDay(for: Date())
+        let start = calendar.startOfDay(for: focusedDate)
         guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return }
+        let focusedIsToday = calendar.isDateInToday(focusedDate)
 
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
         let events = store.events(matching: predicate)
-            .filter { !$0.isAllDay ? $0.endDate > Date() : true } // hide finished timed events
+            // On today, hide events that already finished; on other days show all.
+            .filter { focusedIsToday && !$0.isAllDay ? $0.endDate > Date() : true }
             .sorted { ($0.startDate ?? .distantPast) < ($1.startDate ?? .distantPast) }
             .prefix(4)
             .map {

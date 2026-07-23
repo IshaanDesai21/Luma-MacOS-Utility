@@ -211,13 +211,13 @@ final class DynamicIslandModel {
     /// driven by the current tab and whether the calendar column is shown.
     private func expandedContentSize() -> CGSize {
         if tab == .shelf {
-            return CGSize(width: 460, height: 168)
+            return CGSize(width: 460, height: 176)
         }
         if settings.islandShowCalendar {
-            return CGSize(width: 600, height: 158)
+            return CGSize(width: 600, height: 168)
         }
-        let tall = settings.islandFileShelf && (isDropTargeting || !shelf.items.isEmpty)
-        return CGSize(width: 384, height: tall ? 118 : 92)
+        // Media-only: still tall enough for the full media card (62pt artwork).
+        return CGSize(width: 400, height: 152)
     }
 
     /// boringNotch-style geometry: at rest the tab matches the physical notch

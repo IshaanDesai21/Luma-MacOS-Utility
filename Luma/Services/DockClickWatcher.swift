@@ -33,10 +33,9 @@ final class DockClickWatcher {
 
     private func start() {
         guard tap == nil else { return }
-        requestAccessibilityIfNeeded()
+        // Prompting is centralized in AppModel (once per launch); just try to
+        // install and keep retrying quietly until Accessibility is granted.
         if !installTap() {
-            // Tap creation fails until Accessibility is granted; keep retrying
-            // quietly so the feature starts working the moment it is.
             scheduleRetry()
         }
     }
@@ -97,12 +96,6 @@ final class DockClickWatcher {
             guard let self, !Task.isCancelled, self.tap == nil else { return }
             if !self.installTap() { self.scheduleRetry() }
         }
-    }
-
-    private func requestAccessibilityIfNeeded() {
-        guard !AXIsProcessTrusted() else { return }
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
     }
 
     // MARK: - Event handling

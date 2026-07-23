@@ -12,7 +12,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.stop()
     }
 
+    /// Keep running when the window is closed so the Dynamic Island and menu bar
+    /// stay alive in the background (like a menu-bar utility). Reopen the window
+    /// from the Dock icon.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        false
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows {
+            for window in sender.windows where window.canBecomeMain {
+                window.makeKeyAndOrderFront(nil)
+            }
+            sender.activate(ignoringOtherApps: true)
+        }
+        return true
     }
 }

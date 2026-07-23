@@ -81,6 +81,7 @@ final class AppModel {
         observeHotkeys()
         observeDockClick()
         installMediaKeyInterceptor()
+        observeAppActivation()
         // Any system volume change (keys, slider, AirPods) pops the island HUD.
         moduleServices.audio.startObservingSystemChanges { [weak self] in
             guard let self, self.settings.islandSystemHUD, self.settings.islandEnabled else { return }
@@ -106,14 +107,39 @@ final class AppModel {
         observeMediaKeySetting()
     }
 
+    // MARK: - Accessibility
+
+    @ObservationIgnored private var didPromptAccessibility = false
+    @ObservationIgnored private var didBecomeActiveObserver: NSObjectProtocol?
+
+    /// Prompts for Accessibility at most once per launch, and only when it is
+    /// actually missing (so it never nags after it's been granted).
+    private func promptAccessibilityOnce() {
+        guard !didPromptAccessibility, !AXIsProcessTrusted() else { return }
+        didPromptAccessibility = true
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+    }
+
+    /// The event taps can't be created until Accessibility is granted. When the
+    /// user grants it in System Settings and returns to Luma, re-attempt install
+    /// immediately instead of waiting on the background retry.
+    private func observeAppActivation() {
+        guard didBecomeActiveObserver == nil else { return }
+        didBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.mediaKeyInterceptor?.setEnabled(self.settings.islandSystemHUD && self.settings.islandEnabled)
+                self.dockClickWatcher.setEnabled(self.settings.dockClickToHide)
+            }
+        }
+    }
+
     private func observeMediaKeySetting() {
         let wanted = settings.islandSystemHUD && settings.islandEnabled
-        // Consuming the volume/brightness keys (which hides the native bezel)
-        // requires Accessibility; prompt for it the first time it's turned on.
-        if wanted && !AXIsProcessTrusted() {
-            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-            _ = AXIsProcessTrustedWithOptions(options)
-        }
+        if wanted { promptAccessibilityOnce() }
         mediaKeyInterceptor?.setEnabled(wanted)
         withObservationTracking {
             _ = settings.islandSystemHUD
@@ -124,6 +150,7 @@ final class AppModel {
     }
 
     private func observeDockClick() {
+        if settings.dockClickToHide { promptAccessibilityOnce() }
         dockClickWatcher.setEnabled(settings.dockClickToHide)
         withObservationTracking {
             _ = settings.dockClickToHide
