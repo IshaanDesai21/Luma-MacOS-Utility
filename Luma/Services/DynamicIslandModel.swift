@@ -64,6 +64,13 @@ final class DynamicIslandModel {
     /// Camera/mic/charging state shown in the resting pod.
     @ObservationIgnored let sensors = SensorActivityService()
 
+    /// Today's calendar events shown in the expanded card.
+    @ObservationIgnored let calendar = CalendarService()
+
+    /// Which tab the expanded card is showing.
+    enum Tab { case home, shelf }
+    var tab: Tab = .home
+
     init(
         player: NowPlayingService,
         settings: AppSettings,
@@ -195,9 +202,22 @@ final class DynamicIslandModel {
             let height = 46 * scale
             return IslandLayout(width: 240 * scale, height: height, cornerRadius: height / 2)
         case .expanded:
-            let tall = settings.islandFileShelf && (isDropTargeting || !shelf.items.isEmpty)
-            return IslandLayout(width: 368 * scale, height: (tall ? 112 : 78) * scale, cornerRadius: 30 * scale)
+            let size = expandedContentSize()
+            return IslandLayout(width: size.width * scale, height: size.height * scale, cornerRadius: 30 * scale)
         }
+    }
+
+    /// The content size of the expanded card, before scale/notch clearance,
+    /// driven by the current tab and whether the calendar column is shown.
+    private func expandedContentSize() -> CGSize {
+        if tab == .shelf {
+            return CGSize(width: 460, height: 168)
+        }
+        if settings.islandShowCalendar {
+            return CGSize(width: 600, height: 158)
+        }
+        let tall = settings.islandFileShelf && (isDropTargeting || !shelf.items.isEmpty)
+        return CGSize(width: 384, height: tall ? 118 : 92)
     }
 
     /// boringNotch-style geometry: at rest the tab matches the physical notch
@@ -213,9 +233,8 @@ final class DynamicIslandModel {
         case .hud:
             return IslandLayout(width: max(nW + 150, 300) * scale, height: nH + 26, cornerRadius: 20)
         case .expanded:
-            let tall = settings.islandFileShelf && (isDropTargeting || !shelf.items.isEmpty)
-            let content: CGFloat = tall ? 118 : 84
-            return IslandLayout(width: max(nW + 240, 380) * scale, height: nH + content, cornerRadius: 24)
+            let size = expandedContentSize()
+            return IslandLayout(width: max(nW + 200, size.width) * scale, height: nH + size.height * scale, cornerRadius: 24)
         }
     }
 

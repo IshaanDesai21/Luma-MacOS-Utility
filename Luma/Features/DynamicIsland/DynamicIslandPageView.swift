@@ -281,6 +281,13 @@ struct DynamicIslandPageView: View {
             }
             Divider().padding(.leading, 52)
             featureRow(
+                icon: "calendar",
+                title: "Calendar",
+                subtitle: "Show today's schedule beside the media card (uses your system Calendar accounts).",
+                isOn: $settings.islandShowCalendar
+            )
+            Divider().padding(.leading, 52)
+            featureRow(
                 icon: "arrow.down.circle",
                 title: "Download indicator",
                 subtitle: "A blue pulse in the pod while files are downloading.",

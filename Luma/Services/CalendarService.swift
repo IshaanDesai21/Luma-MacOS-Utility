@@ -1,0 +1,107 @@
+import AppKit
+import EventKit
+import Observation
+
+/// Reads today's calendar events for the island's calendar panel. Uses EventKit,
+/// so it covers Apple Calendar and any Google/Exchange account the user has
+/// added to the system Calendar app.
+@MainActor
+@Observable
+final class CalendarService {
+    struct Event: Identifiable, Hashable {
+        let id: String
+        let title: String
+        let start: Date
+        let isAllDay: Bool
+        let calendarColor: NSColor
+    }
+
+    enum Access { case unknown, granted, denied }
+
+    private(set) var todaysEvents: [Event] = []
+    private(set) var access: Access = .unknown
+
+    @ObservationIgnored private let store = EKEventStore()
+    @ObservationIgnored private var refreshTask: Task<Void, Never>?
+
+    /// The seven days shown in the strip: three before today through three after.
+    var weekDays: [Date] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        return (-2...4).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
+    }
+
+    func start() {
+        requestAccess()
+        // React to external calendar edits.
+        NotificationCenter.default.addObserver(
+            forName: .EKEventStoreChanged, object: store, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reload() }
+        }
+        // Light periodic refresh so "today" and event times stay current.
+        refreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                self?.reload()
+            }
+        }
+    }
+
+    func stop() {
+        refreshTask?.cancel()
+        refreshTask = nil
+    }
+
+    private func requestAccess() {
+        store.requestFullAccessToEvents { [weak self] granted, _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.access = granted ? .granted : .denied
+                if granted { self.reload() }
+            }
+        }
+    }
+
+    func reload() {
+        guard access == .granted else { return }
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: Date())
+        guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return }
+
+        let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
+        let events = store.events(matching: predicate)
+            .filter { !$0.isAllDay ? $0.endDate > Date() : true } // hide finished timed events
+            .sorted { ($0.startDate ?? .distantPast) < ($1.startDate ?? .distantPast) }
+            .prefix(4)
+            .map {
+                Event(
+                    id: $0.eventIdentifier ?? UUID().uuidString,
+                    title: $0.title ?? "Untitled",
+                    start: $0.startDate ?? start,
+                    isAllDay: $0.isAllDay,
+                    calendarColor: $0.calendar?.color ?? .systemBlue
+                )
+            }
+        todaysEvents = Array(events)
+    }
+
+    /// Opens the system Calendar app (which shows Google/iCloud events alike).
+    func openCalendarApp() {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.iCal") {
+            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+        } else if let web = URL(string: "https://calendar.google.com") {
+            NSWorkspace.shared.open(web)
+        }
+    }
+
+    func requestAccessAgain() {
+        if access == .denied {
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
+                NSWorkspace.shared.open(url)
+            }
+        } else {
+            requestAccess()
+        }
+    }
+}

@@ -1,21 +1,28 @@
+import AppKit
 import Foundation
 import Observation
 
-/// Unified now-playing feed for the island. Self-contained: it polls Spotify and
-/// Apple Music directly and shows whichever is actually playing, so it never
-/// depends on another service's timing and always reflects reality right after
-/// launch. Exposes the same track + controls surface regardless of the player.
+/// Unified now-playing feed for the island. Polls Spotify and Apple Music via
+/// AppleScript (reliable, with artwork + full controls) and, when available,
+/// the system-wide MediaRemote feed (browser video etc.). Shows whichever is
+/// actually playing and routes controls to that source.
 @MainActor
 @Observable
 final class NowPlayingService {
-    enum Source { case spotify, music, none }
+    enum Source: Equatable { case spotify, music, system, none }
 
     private(set) var track: Track?
     private(set) var source: Source = .none
 
     @ObservationIgnored private let spotify = SpotifyBridge()
     @ObservationIgnored private let music = MusicBridge()
+    @ObservationIgnored private let system = MediaRemoteBridge()
     @ObservationIgnored private var pollingTask: Task<Void, Never>?
+
+    private static let spotifyBundleID = "com.spotify.client"
+
+    /// True when the system feed is usable on this OS (macOS 14.0-15.3).
+    var systemFeedAvailable: Bool { system.isAvailable }
 
     func startMonitoring(interval: Duration = .seconds(1)) {
         guard pollingTask == nil else { return }
@@ -34,13 +41,19 @@ final class NowPlayingService {
     }
 
     private func refresh() async {
-        // Query both players concurrently so a slow AppleScript can't stall the
-        // other, then pick a winner.
+        // Query every source concurrently so a slow one can't stall the others.
         async let spotifyTrack = spotify.fetch()
         async let musicTrack = music.fetch()
-        let candidates: [(Source, Track?)] = [(.spotify, await spotifyTrack), (.music, await musicTrack)]
+        async let systemInfo = system.fetch()
 
-        // Prefer whatever is actively playing; otherwise show any loaded track.
+        let s = await spotifyTrack
+        let m = await musicTrack
+        let sys = (await systemInfo).map(Self.track(from:))
+
+        // App players (Spotify/Music) win when playing — better controls and
+        // artwork. The system feed covers everything else (browser video).
+        let candidates: [(Source, Track?)] = [(.spotify, s), (.music, m), (.system, sys)]
+
         if let playing = candidates.first(where: { $0.1?.isPlaying == true }) {
             track = playing.1
             source = playing.0
@@ -53,14 +66,60 @@ final class NowPlayingService {
         }
     }
 
+    private static func track(from info: MediaRemoteBridge.Info) -> Track {
+        Track(
+            title: info.title,
+            artist: info.artist,
+            album: info.album,
+            artworkData: info.artworkData,
+            duration: info.duration,
+            position: info.elapsed,
+            isPlaying: info.isPlaying
+        )
+    }
+
     // MARK: - Controls (routed to whichever player is active)
 
-    func playPause() { command("playpause"); refreshSoon() }
-    func nextTrack() { command("next track"); refreshSoon() }
-    func previousTrack() { command("previous track"); refreshSoon() }
+    func playPause() {
+        switch source {
+        case .spotify: spotify.command("playpause")
+        case .music: music.command("playpause")
+        case .system: system.togglePlayPause()
+        case .none:
+            // Nothing is playing: open Spotify so the play button always does
+            // something sensible.
+            launchSpotify()
+            return
+        }
+        refreshSoon()
+    }
+
+    func nextTrack() {
+        switch source {
+        case .spotify: spotify.command("next track")
+        case .music: music.command("next track")
+        case .system: system.next()
+        case .none: return
+        }
+        refreshSoon()
+    }
+
+    func previousTrack() {
+        switch source {
+        case .spotify: spotify.command("previous track")
+        case .music: music.command("previous track")
+        case .system: system.previous()
+        case .none: return
+        }
+        refreshSoon()
+    }
 
     func seek(to position: TimeInterval) {
-        command("set player position to \(String(format: "%.2f", position))")
+        switch source {
+        case .spotify: spotify.command("set player position to \(String(format: "%.2f", position))")
+        case .music: music.command("set player position to \(String(format: "%.2f", position))")
+        case .system, .none: return   // MediaRemote seek is unreliable; skip.
+        }
         if var current = track {          // optimistic update so the bar responds instantly
             current.position = position
             track = current
@@ -68,12 +127,27 @@ final class NowPlayingService {
         refreshSoon()
     }
 
-    private func command(_ command: String) {
+    /// The app icon for the current source, for the little badge on the artwork.
+    func sourceBadge() -> NSImage? {
         switch source {
-        case .spotify: spotify.command(command)
-        case .music: music.command(command)
-        case .none: break
+        case .spotify: return Self.appIcon(bundleID: Self.spotifyBundleID)
+        case .music: return Self.appIcon(bundleID: "com.apple.Music")
+        case .system, .none: return nil
         }
+    }
+
+    private static func appIcon(bundleID: String) -> NSImage? {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
+        return NSWorkspace.shared.icon(forFile: url.path)
+    }
+
+    private func launchSpotify() {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.spotifyBundleID) else {
+            // Spotify isn't installed; send people to get it.
+            if let web = URL(string: "https://open.spotify.com") { NSWorkspace.shared.open(web) }
+            return
+        }
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 
     private func refreshSoon() {
@@ -107,8 +181,6 @@ final class MusicBridge: @unchecked Sendable {
         }
     }
 
-    // MARK: - Queue-confined work
-
     private func run() -> Track? {
         if query == nil { query = NSAppleScript(source: Self.querySource) }
         guard let query else { return nil }
@@ -131,7 +203,6 @@ final class MusicBridge: @unchecked Sendable {
             title: fields[0],
             artist: fields[1],
             album: fields[2],
-            artworkURL: nil,               // Music.app exposes no artwork URL via scripting
             duration: duration,            // seconds (unlike Spotify's milliseconds)
             position: position,
             isPlaying: state == "playing"

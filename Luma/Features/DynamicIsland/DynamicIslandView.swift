@@ -100,8 +100,8 @@ struct DynamicIslandView: View {
                 guard settings.islandTrackPulse, old != nil, new != nil else { return }
                 pulse()
             }
-            .task(id: player.track?.artworkURL) {
-                glowColor = await Self.averageColor(of: player.track?.artworkURL)
+            .task(id: artworkIdentity) {
+                glowColor = await Self.averageColor(url: player.track?.artworkURL, data: player.track?.artworkData)
             }
             .dropDestination(for: URL.self) { urls, _ in
                 guard settings.islandFileShelf else { return false }
@@ -292,76 +292,256 @@ struct DynamicIslandView: View {
     // MARK: - Expanded card
 
     private var expandedContent: some View {
-        ZStack {
-            dropZone.opacity(model.isDropTargeting ? 1 : 0)
-            mediaAndShelf.opacity(model.isDropTargeting ? 0 : 1)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
-    }
-
-    private var dropZone: some View {
-        VStack(spacing: 5) {
-            Image(systemName: "tray.and.arrow.down.fill").font(.system(size: 19, weight: .medium))
-            Text("Drop to hold").font(.system(size: 12, weight: .medium))
-        }
-        .foregroundStyle(.secondary)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var mediaAndShelf: some View {
         VStack(spacing: 8) {
-            mediaRow
-            if settings.islandFileShelf && !model.shelf.items.isEmpty {
-                shelfStrip
+            topBar
+            if model.tab == .shelf {
+                shelfGrid
+            } else {
+                homeRow
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
+    }
+
+    // The little tab row on top: Home / Shelf on the left (Shelf is a drop
+    // target), battery + charge state on the right.
+    private var topBar: some View {
+        HStack(spacing: 8) {
+            tabButton(.home, icon: "house.fill")
+            if settings.islandFileShelf {
+                tabButton(.shelf, icon: "tray.fill")
+                    .overlay(alignment: .topTrailing) {
+                        if !model.shelf.items.isEmpty {
+                            Text("\(model.shelf.items.count)")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(.black)
+                                .frame(width: 13, height: 13)
+                                .background(.white, in: Circle())
+                                .offset(x: 4, y: -4)
+                        }
+                    }
+                    .dropDestination(for: URL.self) { urls, _ in
+                        model.shelf.add(urls: urls)
+                        model.tab = .shelf
+                        return true
+                    }
+            }
+            Spacer()
+            batteryStatus
+        }
+        .frame(height: 24)
+    }
+
+    private func tabButton(_ tab: DynamicIslandModel.Tab, icon: String) -> some View {
+        let selected = model.tab == tab
+        return Button {
+            model.tab = tab
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(selected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                .frame(width: 34, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(.white.opacity(selected ? 0.14 : 0.04))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var batteryStatus: some View {
+        HStack(spacing: 6) {
+            if model.monitor.hasBattery {
+                Text("\(Int((model.monitor.batteryLevel * 100).rounded()))%")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Image(systemName: BatteryModule.symbol(model.monitor))
+                    .font(.system(size: 13))
+                    .foregroundStyle(model.sensors.isCharging ? .green : .secondary)
             }
         }
     }
 
-    private var mediaRow: some View {
+    // MARK: - Home tab: media (+ calendar)
+
+    private var homeRow: some View {
+        HStack(spacing: 14) {
+            mediaColumn
+                .frame(maxWidth: .infinity)
+            if settings.islandShowCalendar {
+                Rectangle()
+                    .fill(.white.opacity(0.08))
+                    .frame(width: 1)
+                calendarColumn
+                    .frame(width: 250)
+            }
+        }
+    }
+
+    private var mediaColumn: some View {
         HStack(spacing: 12) {
-            artwork(size: 40, radius: 9)
-            VStack(alignment: .leading, spacing: 2) {
+            artwork(size: 62, radius: 12)
+                .overlay(alignment: .bottomTrailing) {
+                    if let badge = player.sourceBadge() {
+                        Image(nsImage: badge)
+                            .resizable()
+                            .frame(width: 20, height: 20)
+                            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                            .offset(x: 5, y: 5)
+                    }
+                }
+            VStack(alignment: .leading, spacing: 4) {
                 Text(player.track?.title ?? "Nothing playing")
-                    .font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                Text(player.track?.artist ?? "Drag files here to hold them")
-                    .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                    .font(.system(size: 15, weight: .bold)).lineLimit(1)
+                Text(player.track?.artist ?? "Play something to see it here")
+                    .font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
                 if settings.islandShowSeekBar {
                     SeekBar(
                         progress: player.track?.progress ?? 0,
                         duration: player.track?.duration ?? 0,
                         onSeek: { player.seek(to: $0) }
                     )
-                    .frame(height: 11)
+                    .frame(height: 12)
                     .disabled(player.track == nil)
+                    .padding(.top, 2)
                 }
+                controls
+                    .padding(.top, 2)
+                    .frame(maxWidth: .infinity)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            controls
         }
     }
 
-    // MARK: - Held files
+    // MARK: - Calendar column
 
-    private var shelfStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(model.shelf.items) { item in
-                    fileChip(item)
+    private var calendarColumn: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            weekStrip
+            eventsList
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .contentShape(Rectangle())
+        .onTapGesture { model.calendar.openCalendarApp() }
+    }
+
+    private var weekStrip: some View {
+        let today = Calendar.current.startOfDay(for: nowDate)
+        return HStack(alignment: .top, spacing: 0) {
+            Text(monthLabel)
+                .font(.system(size: 16, weight: .bold))
+                .fixedSize()
+                .padding(.trailing, 6)
+            ForEach(model.calendar.weekDays, id: \.self) { day in
+                let isToday = Calendar.current.isDate(day, inSameDayAs: today)
+                VStack(spacing: 3) {
+                    Text(weekdayLabel(day))
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(isToday ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                    Text("\(Calendar.current.component(.day, from: day))")
+                        .font(.system(size: 12, weight: isToday ? .bold : .regular))
+                        .foregroundStyle(isToday ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                        .frame(width: 22, height: 22)
+                        .background {
+                            if isToday { Circle().fill(.tint) }
+                        }
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var eventsList: some View {
+        if model.calendar.access == .denied {
+            calendarHint("Allow calendar access", system: "calendar.badge.exclamationmark") {
+                model.calendar.requestAccessAgain()
+            }
+        } else if model.calendar.todaysEvents.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("No events today")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("Enjoy your free time!")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(model.calendar.todaysEvents) { event in
+                    HStack(spacing: 7) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color(nsColor: event.calendarColor))
+                            .frame(width: 3, height: 22)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(event.title)
+                                .font(.system(size: 12, weight: .medium)).lineLimit(1)
+                            Text(event.isAllDay ? "All day" : event.start.formatted(date: .omitted, time: .shortened))
+                                .font(.system(size: 10)).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                    }
                 }
             }
         }
-        .frame(height: 32)
+    }
+
+    private func calendarHint(_ text: String, system: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: system).font(.system(size: 12))
+                Text(text).font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var nowDate: Date { Date() }
+
+    private var monthLabel: String {
+        let f = DateFormatter(); f.dateFormat = "MMM"
+        return f.string(from: nowDate)
+    }
+
+    private func weekdayLabel(_ day: Date) -> String {
+        let f = DateFormatter(); f.dateFormat = "EEE"
+        return f.string(from: day)
+    }
+
+    // MARK: - Shelf tab
+
+    private var shelfGrid: some View {
+        Group {
+            if model.shelf.items.isEmpty {
+                VStack(spacing: 6) {
+                    Image(systemName: "tray").font(.system(size: 22)).foregroundStyle(.tertiary)
+                    Text("Drop files here to keep them handy")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 120, maximum: 160), spacing: 8)], spacing: 8) {
+                        ForEach(model.shelf.items) { item in
+                            fileChip(item)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func fileChip(_ item: FileShelf.Item) -> some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             Image(nsImage: model.shelf.icon(for: item))
-                .resizable().frame(width: 18, height: 18)
+                .resizable().frame(width: 20, height: 20)
             Text(item.name)
                 .font(.system(size: 11))
                 .lineLimit(1)
-                .frame(maxWidth: 96, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             Button { model.shelf.remove(item) } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: 11))
@@ -369,9 +549,9 @@ struct DynamicIslandView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 4)
-        .background(.quaternary.opacity(0.5), in: Capsule())
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .draggable(item.url)
         .onTapGesture { model.shelf.open(item) }
         .contextMenu {
@@ -386,24 +566,25 @@ struct DynamicIslandView: View {
     // MARK: - Media controls
 
     private var controls: some View {
-        HStack(spacing: 10) {
-            controlButton("backward.fill", size: 12) { player.previousTrack() }
-            controlButton((player.track?.isPlaying ?? false) ? "pause.fill" : "play.fill", size: 15) { player.playPause() }
-            controlButton("forward.fill", size: 12) { player.nextTrack() }
+        HStack(spacing: 22) {
+            controlButton("backward.fill", size: 14, enabled: player.track != nil) { player.previousTrack() }
+            // Play/pause is always enabled: with nothing playing it opens Spotify.
+            controlButton((player.track?.isPlaying ?? false) ? "pause.fill" : "play.fill", size: 17, enabled: true) { player.playPause() }
+            controlButton("forward.fill", size: 14, enabled: player.track != nil) { player.nextTrack() }
         }
-        .opacity(player.track == nil ? 0.35 : 1)
     }
 
-    private func controlButton(_ symbol: String, size: CGFloat, action: @escaping () -> Void) -> some View {
+    private func controlButton(_ symbol: String, size: CGFloat, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: size, weight: .semibold))
                 .foregroundStyle(.primary)
-                .frame(width: 26, height: 26)
+                .frame(width: 28, height: 28)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(player.track == nil)
+        .opacity(enabled ? 1 : 0.3)
+        .disabled(!enabled)
     }
 
     // MARK: - Visualizer
@@ -440,7 +621,9 @@ struct DynamicIslandView: View {
             .fill(.quaternary)
             .frame(width: size, height: size)
             .overlay {
-                if let url = player.track?.artworkURL {
+                if let data = player.track?.artworkData, let image = NSImage(data: data) {
+                    Image(nsImage: image).resizable().scaledToFill()
+                } else if let url = player.track?.artworkURL {
                     AsyncImage(url: url) { image in
                         image.resizable().scaledToFill()
                     } placeholder: {
@@ -455,11 +638,25 @@ struct DynamicIslandView: View {
 
     // MARK: - Artwork glow color
 
-    /// Fetches the artwork and averages it down to one tint color for the glow.
-    private static func averageColor(of url: URL?) async -> Color? {
-        guard let url else { return nil }
-        guard let (data, _) = try? await URLSession.shared.data(from: url),
-              let image = NSImage(data: data),
+    /// A stable identity for the current artwork so the glow recomputes on change.
+    private var artworkIdentity: String {
+        if let url = player.track?.artworkURL { return url.absoluteString }
+        if let data = player.track?.artworkData { return "\(data.count)-\(player.track?.title ?? "")" }
+        return "none"
+    }
+
+    /// Averages the artwork (remote URL or inline data) to one tint for the glow.
+    private static func averageColor(url: URL?, data: Data?) async -> Color? {
+        let imageData: Data?
+        if let data {
+            imageData = data
+        } else if let url, let (fetched, _) = try? await URLSession.shared.data(from: url) {
+            imageData = fetched
+        } else {
+            imageData = nil
+        }
+        guard let imageData,
+              let image = NSImage(data: imageData),
               let tiff = image.tiffRepresentation,
               let source = NSBitmapImageRep(data: tiff) else { return nil }
 

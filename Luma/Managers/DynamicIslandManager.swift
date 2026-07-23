@@ -53,6 +53,7 @@ final class DynamicIslandManager {
     private func observe() {
         withObservationTracking { [weak self] in
             _ = self?.settings.islandEnabled
+            _ = self?.settings.islandShowCalendar
             _ = self?.moduleManager.revision
         } onChange: { [weak self] in
             Task { @MainActor in
@@ -66,8 +67,10 @@ final class DynamicIslandManager {
         if settings.islandEnabled {
             windowManager.show(model: model)
             model.sensors.start()
+            if settings.islandShowCalendar { model.calendar.start() }
         } else {
             model.sensors.stop()
+            model.calendar.stop()
             windowManager.hide()
         }
     }

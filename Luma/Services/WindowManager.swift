@@ -29,9 +29,9 @@ final class WindowManager {
     private var collapseTask: Task<Void, Never>?
     private var optionDismissed = false
 
-    /// Canvas size, big enough for the largest island at maximum scale plus
-    /// shadow slack. Static so panel frames never have to change.
-    private let canvasSize = CGSize(width: 640, height: 260)
+    /// Canvas size, big enough for the largest island (wide calendar card at
+    /// max scale) plus shadow slack. Static so panel frames never have to change.
+    private let canvasSize = CGSize(width: 960, height: 320)
 
     // MARK: - Lifecycle
 

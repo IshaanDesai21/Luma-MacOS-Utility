@@ -186,6 +186,11 @@ final class AppSettings {
         didSet { defaults.set(islandGlowAmount, forKey: Keys.islandGlowAmount) }
     }
 
+    /// Show today's calendar beside the media card in the expanded island.
+    var islandShowCalendar: Bool {
+        didSet { defaults.set(islandShowCalendar, forKey: Keys.islandShowCalendar) }
+    }
+
     var islandShowWhilePlaying: Bool {
         didSet { defaults.set(islandShowWhilePlaying, forKey: Keys.islandShowWhilePlaying) }
     }
@@ -265,6 +270,7 @@ final class AppSettings {
         static let islandDownloadProgress = "island.downloadProgress"
         static let islandHiddenUntilHover = "island.hiddenUntilHover"
         static let islandGlowAmount = "island.glowAmount"
+        static let islandShowCalendar = "island.showCalendar"
         static let launchOnSettings = "app.launchOnSettings"
         static let dockClickToHide = "dock.clickToHide"
         static let islandHideShortcut = "shortcut.islandHide"
@@ -336,6 +342,7 @@ final class AppSettings {
         islandHiddenUntilHover = flag(Keys.islandHiddenUntilHover, default: false)
         let storedGlow = defaults.object(forKey: Keys.islandGlowAmount) as? Double
         islandGlowAmount = storedGlow ?? 0.35
+        islandShowCalendar = flag(Keys.islandShowCalendar, default: true)
         launchOnSettings = defaults.bool(forKey: Keys.launchOnSettings)
         dockClickToHide = defaults.bool(forKey: Keys.dockClickToHide)
         islandHideShortcut = Self.loadShortcut(defaults, Keys.islandHideShortcut)

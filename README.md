@@ -31,8 +31,13 @@ A small glass pod under the notch that springs open into a full media card when
 you hover near it. Everything is a toggle or slider — customize the notch to
 taste:
 
-- **Now playing** (Spotify and Apple Music): title, artist, artwork,
-  next/previous, play/pause, with controls routed to whichever app is playing
+- **Now playing** (Spotify, Apple Music, and system audio): title, artist,
+  artwork, next/previous, play/pause, routed to whichever source is playing;
+  pressing play with nothing open launches Spotify
+- **Calendar** column with today's schedule and a week strip, from your system
+  Calendar accounts (Apple, Google, Exchange); click to open Calendar
+- **Tabbed expanded card** with a Home view (media + calendar) and a Shelf tab
+  you can drop files onto
 - **Seek bar** — scrub the current song right from the notch
 - **Two styles** — a floating glass pod, or "part of the notch" mode that fuses
   seamlessly with the physical notch (boringNotch style) on notched MacBooks
