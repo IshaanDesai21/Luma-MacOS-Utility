@@ -25,11 +25,12 @@ final class MediaRemoteBridge: @unchecked Sendable {
     /// True only if the framework loaded and the entry points resolved.
     let isAvailable: Bool
 
-    // The callbacks are Objective-C blocks, so the parameter types MUST be
-    // `@convention(block)` — a plain Swift closure has a different ABI and
-    // crashes when MediaRemote invokes it.
-    private typealias GetInfoFn = @convention(c) (DispatchQueue, @convention(block) (CFDictionary?) -> Void) -> Void
-    private typealias GetIsPlayingFn = @convention(c) (DispatchQueue, @convention(block) (Bool) -> Void) -> Void
+    // MediaRemote invokes these callbacks ASYNCHRONOUSLY (after the call
+    // returns), so they must be `@escaping`. Swift auto-bridges the captured
+    // Swift closure to an Objective-C block for the C function pointer; adding
+    // an explicit `@convention(block)` here makes it non-escaping and traps.
+    private typealias GetInfoFn = @convention(c) (DispatchQueue, @escaping (CFDictionary?) -> Void) -> Void
+    private typealias GetIsPlayingFn = @convention(c) (DispatchQueue, @escaping (Bool) -> Void) -> Void
     private typealias SendCommandFn = @convention(c) (Int, CFDictionary?) -> Bool
 
     private let getInfo: GetInfoFn?
@@ -59,15 +60,30 @@ final class MediaRemoteBridge: @unchecked Sendable {
         isAvailable = getInfo != nil
     }
 
+    /// Guards a continuation so it resumes exactly once, whether by the
+    /// MediaRemote callback or the safety timeout below — never both, never
+    /// zero times (which would hang the caller forever).
+    private final class OneShot<T>: @unchecked Sendable {
+        private var continuation: CheckedContinuation<T, Never>?
+        private let lock = NSLock()
+        init(_ continuation: CheckedContinuation<T, Never>) { self.continuation = continuation }
+        func resume(_ value: T) {
+            lock.lock(); defer { lock.unlock() }
+            continuation?.resume(returning: value)
+            continuation = nil
+        }
+    }
+
     // MARK: - Reading
 
     /// Fetches the current system now-playing info, or nil if nothing / blocked.
     func fetch() async -> Info? {
         guard isAvailable, let getInfo else { return nil }
         let info: [AnyHashable: Any]? = await withCheckedContinuation { continuation in
-            getInfo(callbackQueue) { dict in
-                continuation.resume(returning: dict as? [AnyHashable: Any])
-            }
+            let shot = OneShot(continuation)
+            getInfo(callbackQueue) { dict in shot.resume(dict as? [AnyHashable: Any]) }
+            // If MediaRemote never calls back (blocked), don't hang the poll loop.
+            callbackQueue.asyncAfter(deadline: .now() + 0.6) { shot.resume(nil) }
         }
         guard let info, !info.isEmpty else { return nil }
 
@@ -97,9 +113,9 @@ final class MediaRemoteBridge: @unchecked Sendable {
     private func fetchIsPlaying(fallback: Bool) async -> Bool {
         guard let getIsPlaying else { return fallback }
         return await withCheckedContinuation { continuation in
-            getIsPlaying(callbackQueue) { playing in
-                continuation.resume(returning: playing)
-            }
+            let shot = OneShot(continuation)
+            getIsPlaying(callbackQueue) { playing in shot.resume(playing) }
+            callbackQueue.asyncAfter(deadline: .now() + 0.6) { shot.resume(fallback) }
         }
     }
 

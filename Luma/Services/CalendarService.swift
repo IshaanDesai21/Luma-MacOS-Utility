@@ -54,14 +54,24 @@ final class CalendarService {
     }
 
     private func requestAccess() {
-        // The completion is delivered on an arbitrary queue, so hop to the main
-        // actor explicitly (assumeIsolated would trap off the main thread).
-        store.requestFullAccessToEvents { [weak self] granted, _ in
-            Task { @MainActor in
-                guard let self else { return }
-                self.access = granted ? .granted : .denied
-                if granted { self.reload() }
+        // Only prompt when the user hasn't decided yet; otherwise reflect the
+        // existing decision (reading events needs full access).
+        switch EKEventStore.authorizationStatus(for: .event) {
+        case .fullAccess:
+            access = .granted
+            reload()
+        case .notDetermined:
+            // The completion is delivered on an arbitrary queue, so hop to the
+            // main actor explicitly (assumeIsolated would trap off-main).
+            store.requestFullAccessToEvents { [weak self] granted, _ in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.access = granted ? .granted : .denied
+                    if granted { self.reload() }
+                }
             }
+        default:
+            access = .denied
         }
     }
 
