@@ -67,8 +67,11 @@ final class DynamicIslandModel {
     /// Today's calendar events shown in the expanded card.
     @ObservationIgnored let calendar = CalendarService()
 
+    /// Paired Bluetooth devices for the Bluetooth tab.
+    @ObservationIgnored let bluetooth = BluetoothService()
+
     /// Which tab the expanded card is showing.
-    enum Tab { case home, shelf }
+    enum Tab { case home, shelf, bluetooth }
     var tab: Tab = .home
 
     init(

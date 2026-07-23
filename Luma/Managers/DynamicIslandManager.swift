@@ -67,9 +67,11 @@ final class DynamicIslandManager {
         if settings.islandEnabled {
             windowManager.show(model: model)
             model.sensors.start()
+            model.bluetooth.start()
             if settings.islandShowCalendar { model.calendar.start() }
         } else {
             model.sensors.stop()
+            model.bluetooth.stop()
             model.calendar.stop()
             windowManager.hide()
         }

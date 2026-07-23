@@ -331,10 +331,10 @@ struct DynamicIslandView: View {
     private var expandedContent: some View {
         VStack(spacing: 8) {
             topBar
-            if model.tab == .shelf {
-                shelfGrid
-            } else {
-                homeRow
+            switch model.tab {
+            case .home: homeRow
+            case .shelf: shelfGrid
+            case .bluetooth: bluetoothList
             }
         }
         .padding(.horizontal, 16)
@@ -342,8 +342,8 @@ struct DynamicIslandView: View {
         .padding(.bottom, 12)
     }
 
-    // The little tab row on top: Home / Shelf on the left (Shelf is a drop
-    // target), battery + charge state on the right.
+    // The little tab row on top: Home / Shelf / Bluetooth on the left (Shelf is
+    // a drop target), battery + charge state on the right.
     private var topBar: some View {
         HStack(spacing: 8) {
             tabButton(.home, icon: "house.fill")
@@ -365,6 +365,7 @@ struct DynamicIslandView: View {
                         return true
                     }
             }
+            tabButton(.bluetooth, icon: "dot.radiowaves.left.and.right")
             Spacer()
             batteryStatus
         }
@@ -561,6 +562,59 @@ struct DynamicIslandView: View {
             .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Bluetooth tab
+
+    private var bluetoothList: some View {
+        Group {
+            if !model.bluetooth.isPowered {
+                VStack(spacing: 6) {
+                    Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 22)).foregroundStyle(.tertiary)
+                    Text("Bluetooth is off").font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if model.bluetooth.devices.isEmpty {
+                VStack(spacing: 6) {
+                    Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 22)).foregroundStyle(.tertiary)
+                    Text("No paired devices").font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(spacing: 6) {
+                        ForEach(model.bluetooth.devices) { device in
+                            bluetoothRow(device)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func bluetoothRow(_ device: BluetoothService.Device) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: BluetoothService.symbol(forMajorClass: device.majorClass))
+                .font(.system(size: 14))
+                .foregroundStyle(device.connected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(device.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
+                Text(device.connected ? "Connected" : "Not connected")
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 4)
+            Button(device.connected ? "Disconnect" : "Connect") {
+                model.bluetooth.toggle(device)
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(device.connected ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private var nowDate: Date { Date() }

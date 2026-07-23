@@ -31,9 +31,12 @@ A small glass pod under the notch that springs open into a full media card when
 you hover near it. Everything is a toggle or slider — customize the notch to
 taste:
 
-- **Now playing** (Spotify, Apple Music, and system audio): title, artist,
-  artwork, next/previous, play/pause, routed to whichever source is playing;
-  pressing play with nothing open launches Spotify
+- **Now playing** — instant detection via each app's broadcast (no permission
+  needed) plus AppleScript, with smooth progress interpolation; album-art color
+  tints the visualizer, seek bar, and glows around the cover; pressing play with
+  nothing open launches Spotify. Optional system-wide detection (any app,
+  including browser video) via the bundled MediaRemote adapter (see below)
+- **Bluetooth tab** — see paired devices and connect/disconnect from the island
 - **Calendar** column with the day's schedule and a week strip you can scroll to
   browse other days; reads your system Calendar accounts (Apple, Google via
   System Settings → Internet Accounts, Exchange); click to open Calendar
@@ -99,6 +102,22 @@ A modular strip you design yourself:
   live; reopen from the Dock icon
 - Global keyboard shortcuts (hide island, mute mic)
 - Launch at login, animation speed, light/dark/auto appearance
+
+## Optional: system-wide now playing (any app, incl. browser video)
+
+Apple restricted the raw now-playing API on macOS 15.4+, so third-party apps
+can't read it directly. To get system-wide detection, add the
+[`ungive/mediaremote-adapter`](https://github.com/ungive/mediaremote-adapter)
+helper to the app bundle:
+
+1. Download `mediaremote-adapter.pl` and `MediaRemoteAdapter.framework` from that
+   repo's releases.
+2. Drag both into the Xcode project and add them to the **Luma target → Build
+   Phases → Copy Bundle Resources**.
+3. Rebuild. Luma auto-detects them and switches to system-wide detection.
+
+Without the helper, Luma still detects **Spotify and Apple Music** reliably
+through their own change broadcasts and AppleScript.
 
 ## Build from source
 
