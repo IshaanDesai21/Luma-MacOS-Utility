@@ -25,10 +25,12 @@ final class MediaRemoteBridge: @unchecked Sendable {
     /// True only if the framework loaded and the entry points resolved.
     let isAvailable: Bool
 
-    private typealias GetInfoFn = @convention(c) (DispatchQueue, @escaping (CFDictionary?) -> Void) -> Void
-    private typealias GetIsPlayingFn = @convention(c) (DispatchQueue, @escaping (Bool) -> Void) -> Void
+    // The callbacks are Objective-C blocks, so the parameter types MUST be
+    // `@convention(block)` — a plain Swift closure has a different ABI and
+    // crashes when MediaRemote invokes it.
+    private typealias GetInfoFn = @convention(c) (DispatchQueue, @convention(block) (CFDictionary?) -> Void) -> Void
+    private typealias GetIsPlayingFn = @convention(c) (DispatchQueue, @convention(block) (Bool) -> Void) -> Void
     private typealias SendCommandFn = @convention(c) (Int, CFDictionary?) -> Bool
-    private typealias GetAppPIDFn = @convention(c) (DispatchQueue, @escaping (Int32) -> Void) -> Void
 
     private let getInfo: GetInfoFn?
     private let getIsPlaying: GetIsPlayingFn?

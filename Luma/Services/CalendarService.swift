@@ -54,8 +54,10 @@ final class CalendarService {
     }
 
     private func requestAccess() {
+        // The completion is delivered on an arbitrary queue, so hop to the main
+        // actor explicitly (assumeIsolated would trap off the main thread).
         store.requestFullAccessToEvents { [weak self] granted, _ in
-            MainActor.assumeIsolated {
+            Task { @MainActor in
                 guard let self else { return }
                 self.access = granted ? .granted : .denied
                 if granted { self.reload() }
