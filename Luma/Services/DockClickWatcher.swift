@@ -128,15 +128,42 @@ final class DockClickWatcher {
                 return Unmanaged.passUnretained(event)
             }
             // Consume the click entirely — the Dock never sees it, so nothing
-            // can re-activate the app — then hide.
+            // can re-activate the app — then minimize it (genie), falling back
+            // to hide if the app exposes no minimizable windows.
             swallowNextMouseUp = true
-            let name = front.localizedName ?? "app"
-            status = front.hide() ? "Hid \(name) ✓" : "Tried to hide \(name) but macOS refused"
+            minimizeOrHide(front)
             return nil
 
         default:
             return Unmanaged.passUnretained(event)
         }
+    }
+
+    /// Minimizes all of the app's standard windows (the genie effect) via the
+    /// Accessibility API; if it has none, hides the app instead.
+    private func minimizeOrHide(_ app: NSRunningApplication) {
+        let name = app.localizedName ?? "app"
+        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+        var windowsValue: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsValue) == .success,
+           let windows = windowsValue as? [AXUIElement], !windows.isEmpty {
+            var minimizedAny = false
+            for window in windows {
+                // Only minimize standard windows (skip panels/sheets).
+                var role: CFTypeRef?
+                _ = AXUIElementCopyAttributeValue(window, kAXSubroleAttribute as CFString, &role)
+                if let sub = role as? String, sub != (kAXStandardWindowSubrole as String) { continue }
+                if AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanTrue) == .success {
+                    minimizedAny = true
+                }
+            }
+            if minimizedAny {
+                status = "Minimized \(name) ✓"
+                return
+            }
+        }
+        // Fallback: hide the app so whatever is behind comes forward.
+        status = app.hide() ? "Hid \(name) ✓" : "Couldn’t minimize or hide \(name)"
     }
 
     /// If the click landed on the Dock tile of the frontmost regular app,

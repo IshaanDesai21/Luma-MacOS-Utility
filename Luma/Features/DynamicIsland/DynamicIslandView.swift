@@ -20,6 +20,7 @@ struct DynamicIslandView: View {
     @Environment(\.colorScheme) private var contentColorScheme
     @State private var pulsing = false
     @State private var glowColor: Color?
+    @State private var slideForward = true
 
     /// The album-art accent color (vivid), or the app accent when unknown.
     private var albumColor: Color { glowColor ?? .accentColor }
@@ -82,11 +83,13 @@ struct DynamicIslandView: View {
                 radius: expanded ? 18 : 8,
                 y: expanded ? 8 : 3
             )
-            // Album-art glow: a soft halo tinted from the current artwork.
+            // Album-art glow: a soft halo tinted from the current artwork. In
+            // notch style it's biased downward (and tighter) so it never bleeds
+            // up over the real notch — keeping the "part of the hardware" look.
             .shadow(
                 color: (glowColor ?? .clear).opacity(player.track == nil ? 0 : settings.islandGlowAmount),
-                radius: expanded ? 26 : 16,
-                y: 4
+                radius: model.isNotchStyle ? (expanded ? 18 : 10) : (expanded ? 26 : 16),
+                y: model.isNotchStyle ? (expanded ? 20 : 12) : 4
             )
             // Little bounce when the track changes or the Mac unlocks.
             .scaleEffect(pulsing || model.justUnlocked ? 1.05 : 1)
@@ -479,22 +482,37 @@ struct DynamicIslandView: View {
             if model.calendar.access == .granted {
                 CalendarScrollCatcher(
                     onStep: { step in
-                        withAnimation(.easeInOut(duration: 0.28)) { model.calendar.shift(days: step) }
+                        slideForward = step > 0
+                        withAnimation(.smooth(duration: 0.34)) { model.calendar.shift(days: step) }
                     },
                     onClick: { model.calendar.openCalendarApp() }
                 )
             }
         }
-        .animation(.easeInOut(duration: 0.28), value: model.calendar.focusedDate)
     }
 
     private var weekStrip: some View {
-        let today = Calendar.current.startOfDay(for: nowDate)
-        return HStack(alignment: .top, spacing: 0) {
+        HStack(alignment: .top, spacing: 0) {
             Text(monthLabel)
                 .font(.system(size: 16, weight: .bold))
                 .fixedSize()
                 .padding(.trailing, 6)
+                .contentTransition(.numericText())
+            // The seven day cells slide together as one unit when paging.
+            daysRow
+                .id(model.calendar.focusedDate)
+                .transition(.asymmetric(
+                    insertion: .move(edge: slideForward ? .trailing : .leading).combined(with: .opacity),
+                    removal: .move(edge: slideForward ? .leading : .trailing).combined(with: .opacity)
+                ))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .clipped()
+    }
+
+    private var daysRow: some View {
+        let today = Calendar.current.startOfDay(for: nowDate)
+        return HStack(alignment: .top, spacing: 0) {
             ForEach(model.calendar.weekDays, id: \.self) { day in
                 let isToday = Calendar.current.isDate(day, inSameDayAs: today)
                 let isFocused = Calendar.current.isDate(day, inSameDayAs: model.calendar.focusedDate)

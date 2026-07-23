@@ -121,10 +121,14 @@ final class MenuBarManager {
 
 /// Wraps a single `NSStatusItem` and its transient popover.
 @MainActor
-final class MenuBarItemController: NSObject {
+final class MenuBarItemController: NSObject, NSPopoverDelegate {
+    /// Only one menu-bar popover is open at a time.
+    private static weak var openController: MenuBarItemController?
+
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
     private weak var hostView: NSHostingView<AnyView>?
+    private var outsideMonitors: [Any] = []
     // Kept tight so items sit close together in the menu bar.
     private let horizontalPadding: CGFloat = 6
     private let directAction: (() -> Void)?
@@ -154,6 +158,7 @@ final class MenuBarItemController: NSObject {
 
         popover.behavior = .transient
         popover.animates = true
+        popover.delegate = self
         let controller = NSHostingController(rootView: content)
         controller.sizingOptions = [.preferredContentSize]
         popover.contentViewController = controller
@@ -179,11 +184,47 @@ final class MenuBarItemController: NSObject {
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            // Close any other open popover first, then show this one.
+            Self.openController?.popover.performClose(nil)
+            Self.openController = self
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            installOutsideMonitors()
         }
     }
 
+    /// Belt-and-suspenders dismissal: any click outside the popover (in this app
+    /// or any other) closes it, even if the transient behavior misses it.
+    private func installOutsideMonitors() {
+        removeOutsideMonitors()
+        let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            MainActor.assumeIsolated { self?.popover.performClose(nil) }
+        }
+        let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            MainActor.assumeIsolated {
+                // A click that isn't inside the popover's own window dismisses it.
+                if event.window != self?.popover.contentViewController?.view.window {
+                    self?.popover.performClose(nil)
+                }
+            }
+            return event
+        }
+        outsideMonitors = [global, local].compactMap { $0 }
+    }
+
+    private func removeOutsideMonitors() {
+        outsideMonitors.forEach { NSEvent.removeMonitor($0) }
+        outsideMonitors.removeAll()
+    }
+
+    // MARK: - NSPopoverDelegate
+
+    func popoverDidClose(_ notification: Notification) {
+        removeOutsideMonitors()
+        if Self.openController === self { Self.openController = nil }
+    }
+
     func remove() {
+        removeOutsideMonitors()
         NSStatusBar.system.removeStatusItem(statusItem)
     }
 }

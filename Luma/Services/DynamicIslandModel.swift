@@ -22,7 +22,17 @@ final class DynamicIslandModel {
         var cornerRadius: CGFloat
     }
 
-    var isHovering = false
+    var isHovering = false {
+        didSet {
+            guard isHovering != oldValue else { return }
+            if !isHovering {
+                // Closing the island resets the calendar to today and returns to
+                // the Home tab, so it always reopens fresh.
+                calendar.focusToday()
+                tab = .home
+            }
+        }
+    }
 
     /// True while a file drag is hovering the island (shows the drop zone).
     var isDropTargeting = false

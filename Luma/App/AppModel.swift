@@ -109,21 +109,21 @@ final class AppModel {
 
     // MARK: - Accessibility
 
-    @ObservationIgnored private var didPromptAccessibility = false
     @ObservationIgnored private var didBecomeActiveObserver: NSObjectProtocol?
+    @ObservationIgnored private var prevHUDWanted = false
+    @ObservationIgnored private var prevDockWanted = false
 
-    /// Prompts for Accessibility at most once per launch, and only when it is
-    /// actually missing (so it never nags after it's been granted).
-    private func promptAccessibilityOnce() {
-        guard !didPromptAccessibility, !AXIsProcessTrusted() else { return }
-        didPromptAccessibility = true
+    /// Prompts for Accessibility only when it's actually missing. Called only on
+    /// an explicit user enable, so it never nags on launch or when granted.
+    private func promptAccessibility() {
+        guard !AXIsProcessTrusted() else { return }
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
     }
 
     /// The event taps can't be created until Accessibility is granted. When the
     /// user grants it in System Settings and returns to Luma, re-attempt install
-    /// immediately instead of waiting on the background retry.
+    /// immediately instead of waiting on the background retry — no prompt.
     private func observeAppActivation() {
         guard didBecomeActiveObserver == nil else { return }
         didBecomeActiveObserver = NotificationCenter.default.addObserver(
@@ -139,7 +139,10 @@ final class AppModel {
 
     private func observeMediaKeySetting() {
         let wanted = settings.islandSystemHUD && settings.islandEnabled
-        if wanted { promptAccessibilityOnce() }
+        // Prompt only when the user just turned it on (off -> on), not on launch.
+        if wanted && !prevHUDWanted && didStartHUDObserving { promptAccessibility() }
+        prevHUDWanted = wanted
+        didStartHUDObserving = true
         mediaKeyInterceptor?.setEnabled(wanted)
         withObservationTracking {
             _ = settings.islandSystemHUD
@@ -148,16 +151,21 @@ final class AppModel {
             Task { @MainActor in self?.observeMediaKeySetting() }
         }
     }
+    @ObservationIgnored private var didStartHUDObserving = false
 
     private func observeDockClick() {
-        if settings.dockClickToHide { promptAccessibilityOnce() }
-        dockClickWatcher.setEnabled(settings.dockClickToHide)
+        let wanted = settings.dockClickToHide
+        if wanted && !prevDockWanted && didStartDockObserving { promptAccessibility() }
+        prevDockWanted = wanted
+        didStartDockObserving = true
+        dockClickWatcher.setEnabled(wanted)
         withObservationTracking {
             _ = settings.dockClickToHide
         } onChange: { [weak self] in
             Task { @MainActor in self?.observeDockClick() }
         }
     }
+    @ObservationIgnored private var didStartDockObserving = false
 
     func stop() {
         spotify.stopMonitoring()
