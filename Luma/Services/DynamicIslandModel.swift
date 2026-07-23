@@ -25,11 +25,11 @@ final class DynamicIslandModel {
     var isHovering = false {
         didSet {
             guard isHovering != oldValue else { return }
-            if !isHovering {
-                // Closing the island resets the calendar to today and returns to
-                // the Home tab, so it always reopens fresh.
-                calendar.focusToday()
+            // Every time the island opens it starts fresh: Home (now playing)
+            // tab and today's date — never left on Bluetooth/Shelf/another day.
+            if isHovering {
                 tab = .home
+                calendar.focusToday()
             }
         }
     }
@@ -200,27 +200,59 @@ final class DynamicIslandModel {
 
     // MARK: - Geometry
 
-    func layout(for presentation: Presentation) -> IslandLayout {
-        let scale = CGFloat(settings.islandScale)
-        // The expanded card gets its own extra multiplier so it can be sized
-        // independently of the resting pod.
-        let expandedScale = scale * CGFloat(settings.islandExpandedScale)
-        if isNotchStyle { return notchLayout(for: presentation, scale: scale, expandedScale: expandedScale) }
-
-        switch presentation {
-        case .peek:
-            // A small pod: corner radius is exactly half the height, so the
-            // shape is a true capsule at any scale.
-            let height = 32 * scale
-            return IslandLayout(width: 108 * scale, height: height, cornerRadius: height / 2)
-        case .hud:
-            // The pop-out readout: a wider capsule that springs from the notch.
-            let height = 46 * scale
-            return IslandLayout(width: 240 * scale, height: height, cornerRadius: height / 2)
-        case .expanded:
-            let size = expandedContentSize()
-            return IslandLayout(width: size.width * expandedScale, height: size.height * expandedScale, cornerRadius: 30 * expandedScale)
+    /// The UNSCALED content size of a presentation. The view lays content out at
+    /// this size and scales the whole thing, so nothing ever clips.
+    func baseSize(for presentation: Presentation) -> CGSize {
+        if isNotchStyle {
+            let nW = notchSize.width > 0 ? notchSize.width : 200
+            let nH = notchSize.height > 0 ? notchSize.height : 34
+            switch presentation {
+            case .peek:
+                // Flank the notch with art + visualizer while playing; else match it.
+                return player.track != nil ? CGSize(width: nW + 116, height: max(nH, 34)) : CGSize(width: nW, height: nH)
+            case .hud:
+                return CGSize(width: max(nW + 150, 300), height: nH + 26)
+            case .expanded:
+                let e = expandedContentSize()
+                return CGSize(width: max(nW + 200, e.width), height: nH + e.height)
+            }
         }
+        switch presentation {
+        case .peek: return CGSize(width: 108, height: 32)
+        case .hud: return CGSize(width: 240, height: 46)
+        case .expanded: return expandedContentSize()
+        }
+    }
+
+    func baseCornerRadius(for presentation: Presentation) -> CGFloat {
+        if isNotchStyle {
+            switch presentation {
+            case .peek: return player.track != nil ? 12 : 8
+            case .hud: return 20
+            case .expanded: return 24
+            }
+        }
+        switch presentation {
+        case .peek: return baseSize(for: .peek).height / 2   // capsule
+        case .hud: return baseSize(for: .hud).height / 2
+        case .expanded: return 30
+        }
+    }
+
+    /// Scale applied to a presentation. Expanded is driven ONLY by its own
+    /// slider (independent of pod size); the resting pod uses the pod slider;
+    /// the notch peek is never scaled so it matches the hardware notch exactly.
+    func contentScale(for presentation: Presentation) -> CGFloat {
+        if isNotchStyle && presentation == .peek { return 1 }
+        return presentation == .expanded
+            ? CGFloat(settings.islandExpandedScale)
+            : CGFloat(settings.islandScale)
+    }
+
+    func layout(for presentation: Presentation) -> IslandLayout {
+        let s = contentScale(for: presentation)
+        let base = baseSize(for: presentation)
+        return IslandLayout(width: base.width * s, height: base.height * s, cornerRadius: baseCornerRadius(for: presentation) * s)
     }
 
     /// The content size of the expanded card, before scale/notch clearance,
@@ -234,29 +266,6 @@ final class DynamicIslandModel {
         }
         // Media-only: still tall enough for the full media card (62pt artwork).
         return CGSize(width: 400, height: 152)
-    }
-
-    /// boringNotch-style geometry: at rest the tab matches the physical notch
-    /// exactly (so it disappears into it); everything grows downward from a flat
-    /// top with rounded bottom corners.
-    private func notchLayout(for presentation: Presentation, scale: CGFloat, expandedScale: CGFloat) -> IslandLayout {
-        let nW = notchSize.width > 0 ? notchSize.width : 200
-        let nH = notchSize.height > 0 ? notchSize.height : 34
-        switch presentation {
-        case .peek:
-            if player.track != nil {
-                // Flank the physical notch: album art on the left, visualizer on
-                // the right, notch gap in the middle.
-                return IslandLayout(width: nW + 116, height: max(nH, 34), cornerRadius: 12)
-            }
-            // Exactly the notch — never scaled — so it blends seamlessly.
-            return IslandLayout(width: nW, height: nH, cornerRadius: 8)
-        case .hud:
-            return IslandLayout(width: max(nW + 150, 300) * scale, height: nH + 26, cornerRadius: 20)
-        case .expanded:
-            let size = expandedContentSize()
-            return IslandLayout(width: max(nW + 200, size.width) * expandedScale, height: nH + size.height * expandedScale, cornerRadius: 24)
-        }
     }
 
     var currentLayout: IslandLayout { layout(for: presentation) }

@@ -63,6 +63,10 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
             }
+
+            Section("About") {
+                LabeledContent("Version", value: Bundle.main.lumaVersion)
+            }
         }
         .formStyle(.grouped)
         .frame(maxWidth: 560)

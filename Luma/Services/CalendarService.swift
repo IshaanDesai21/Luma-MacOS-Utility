@@ -38,11 +38,15 @@ final class CalendarService {
         Calendar.current.isDateInToday(focusedDate)
     }
 
+    /// Direction of the last shift, for the strip's slide transition.
+    private(set) var lastShiftForward = true
+
     /// Moves the focused day (from scrolling the strip) and reloads its events.
     func shift(days: Int) {
         guard days != 0 else { return }
         let calendar = Calendar.current
         guard let next = calendar.date(byAdding: .day, value: days, to: focusedDate) else { return }
+        lastShiftForward = days > 0
         focusedDate = next
         reload()
     }
@@ -50,6 +54,20 @@ final class CalendarService {
     func focusToday() {
         focusedDate = Calendar.current.startOfDay(for: Date())
         reload()
+    }
+
+    /// Re-evaluates authorization (e.g. after the user grants it in System
+    /// Settings while Luma is running) without prompting, and loads events.
+    func refreshAccess() {
+        switch EKEventStore.authorizationStatus(for: .event) {
+        case .fullAccess:
+            if access != .granted { access = .granted }
+            reload()
+        case .notDetermined:
+            break
+        default:
+            access = .denied
+        }
     }
 
     /// Opens System Settings > Internet Accounts so the user can add a Google

@@ -18,7 +18,13 @@ final class BluetoothService {
     private(set) var devices: [Device] = []
     private(set) var isPowered = true
 
+    /// Device ids with a connect/disconnect currently in progress (shows a
+    /// looping spinner in the row).
+    private(set) var inFlight: Set<String> = []
+
     @ObservationIgnored private var pollTask: Task<Void, Never>?
+
+    func isBusy(_ device: Device) -> Bool { inFlight.contains(device.id) }
 
     func start() {
         guard pollTask == nil else { return }
@@ -53,11 +59,14 @@ final class BluetoothService {
         .sorted { ($0.connected ? 0 : 1, $0.name.lowercased()) < ($1.connected ? 0 : 1, $1.name.lowercased()) }
     }
 
-    /// Connects a disconnected device or disconnects a connected one.
+    /// Connects a disconnected device or disconnects a connected one, showing a
+    /// spinner on the row until it settles.
     func toggle(_ device: Device) {
+        guard !inFlight.contains(device.id) else { return }
         guard let match = (IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice])?
             .first(where: { $0.addressString == device.id }) else { return }
 
+        inFlight.insert(device.id)
         Task { @MainActor in
             if match.isConnected() {
                 _ = match.closeConnection()
@@ -68,6 +77,7 @@ final class BluetoothService {
             // Reflect the new state after the stack settles.
             try? await Task.sleep(for: .milliseconds(400))
             self.refresh()
+            self.inFlight.remove(device.id)
         }
     }
 

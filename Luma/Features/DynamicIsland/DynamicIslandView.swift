@@ -20,7 +20,6 @@ struct DynamicIslandView: View {
     @Environment(\.colorScheme) private var contentColorScheme
     @State private var pulsing = false
     @State private var glowColor: Color?
-    @State private var slideForward = true
 
     /// The album-art accent color (vivid), or the app accent when unknown.
     private var albumColor: Color { glowColor ?? .accentColor }
@@ -148,43 +147,28 @@ struct DynamicIslandView: View {
         return AnyShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 
-    /// Both states, each laid out at its own natural size and crossfaded, so
-    /// content never reflows while the glass container resizes over it.
+    /// Each layer is laid out at its natural (unscaled) size, then scaled to fit
+    /// its final footprint — so shrinking never clips the album cover or content.
     private var contentLayers: some View {
         ZStack {
-            // In notch style the resting tab is an empty black notch (nothing to
-            // show — the physical notch sits over it). When music plays we flank
-            // the notch with album art (left) and a visualizer (right).
-            if model.isNotchStyle {
-                notchPeekContent
-                    .frame(
-                        width: model.layout(for: .peek).width,
-                        height: model.layout(for: .peek).height
-                    )
-                    .opacity(presentation == .peek ? 1 : 0)
-            } else {
-                peekContent
-                    .frame(
-                        width: model.layout(for: .peek).width,
-                        height: model.layout(for: .peek).height
-                    )
-                    .opacity(presentation == .peek ? 1 : 0)
-            }
-            hudContent
-                .padding(.top, model.notchClearance)
-                .frame(
-                    width: model.layout(for: .hud).width,
-                    height: model.layout(for: .hud).height
-                )
-                .opacity(presentation == .hud ? 1 : 0)
-            expandedContent
-                .padding(.top, model.notchClearance)
-                .frame(
-                    width: model.layout(for: .expanded).width,
-                    height: model.layout(for: .expanded).height
-                )
-                .opacity(presentation == .expanded ? 1 : 0)
+            // In notch style the resting tab is an empty black notch (the physical
+            // notch sits over it); playing flanks it with art + visualizer.
+            islandLayer(model.isNotchStyle ? AnyView(notchPeekContent) : AnyView(peekContent), .peek)
+            islandLayer(AnyView(hudContent.padding(.top, model.notchClearance)), .hud)
+            islandLayer(AnyView(expandedContent.padding(.top, model.notchClearance)), .expanded)
         }
+    }
+
+    /// Lays a layer out at its base size, scales it uniformly to the target, and
+    /// sets the scaled footprint so it fills the glass exactly without clipping.
+    private func islandLayer(_ content: AnyView, _ p: DynamicIslandModel.Presentation) -> some View {
+        let base = model.baseSize(for: p)
+        let scaled = model.layout(for: p)
+        return content
+            .frame(width: base.width, height: base.height)
+            .scaleEffect(model.contentScale(for: p), anchor: .top)
+            .frame(width: scaled.width, height: scaled.height)
+            .opacity(presentation == p ? 1 : 0)
     }
 
     // MARK: - Pop-out HUD (volume / brightness)
@@ -476,19 +460,9 @@ struct DynamicIslandView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .contentShape(Rectangle())
-        // Scroll (either axis) to move through days; click opens Calendar. Only
-        // when access is granted, so it never covers the "Allow access" button.
-        .overlay {
-            if model.calendar.access == .granted {
-                CalendarScrollCatcher(
-                    onStep: { step in
-                        slideForward = step > 0
-                        withAnimation(.smooth(duration: 0.34)) { model.calendar.shift(days: step) }
-                    },
-                    onClick: { model.calendar.openCalendarApp() }
-                )
-            }
-        }
+        // Scrolling to page through days is handled at the window level (see
+        // IslandContainerView); a click opens the Calendar app.
+        .onTapGesture { model.calendar.openCalendarApp() }
     }
 
     private var weekStrip: some View {
@@ -502,8 +476,8 @@ struct DynamicIslandView: View {
             daysRow
                 .id(model.calendar.focusedDate)
                 .transition(.asymmetric(
-                    insertion: .move(edge: slideForward ? .trailing : .leading).combined(with: .opacity),
-                    removal: .move(edge: slideForward ? .leading : .trailing).combined(with: .opacity)
+                    insertion: .move(edge: model.calendar.lastShiftForward ? .trailing : .leading).combined(with: .opacity),
+                    removal: .move(edge: model.calendar.lastShiftForward ? .leading : .trailing).combined(with: .opacity)
                 ))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -623,12 +597,18 @@ struct DynamicIslandView: View {
                     .font(.system(size: 10)).foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
-            Button(device.connected ? "Disconnect" : "Connect") {
-                model.bluetooth.toggle(device)
+            if model.bluetooth.isBusy(device) {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 74, alignment: .trailing)
+            } else {
+                Button(device.connected ? "Disconnect" : "Connect") {
+                    model.bluetooth.toggle(device)
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(device.connected ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
             }
-            .buttonStyle(.plain)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(device.connected ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -818,49 +798,5 @@ struct DynamicIslandView: View {
                             brightness: min(1, max(0.62, b)),
                             alpha: 1)
         return Color(nsColor: vivid)
-    }
-}
-
-/// Captures scroll (either axis) over the calendar to page through days, and a
-/// click to open the Calendar app. Lives as an overlay so the SwiftUI calendar
-/// content still draws underneath.
-private struct CalendarScrollCatcher: NSViewRepresentable {
-    let onStep: (Int) -> Void
-    let onClick: () -> Void
-
-    func makeNSView(context: Context) -> ScrollCatchView {
-        let view = ScrollCatchView()
-        view.onStep = onStep
-        view.onClick = onClick
-        return view
-    }
-
-    func updateNSView(_ nsView: ScrollCatchView, context: Context) {
-        nsView.onStep = onStep
-        nsView.onClick = onClick
-    }
-
-    final class ScrollCatchView: NSView {
-        var onStep: (Int) -> Void = { _ in }
-        var onClick: () -> Void = {}
-        private var accumulated: CGFloat = 0
-        // Larger threshold = slower, more deliberate day-by-day paging.
-        private let pointsPerDay: CGFloat = 55
-
-        override func scrollWheel(with event: NSEvent) {
-            // Use whichever axis the user moved more; both page through dates.
-            let horizontal = abs(event.scrollingDeltaX) >= abs(event.scrollingDeltaY)
-            let delta = horizontal ? event.scrollingDeltaX : -event.scrollingDeltaY
-            accumulated += delta
-            guard abs(accumulated) >= pointsPerDay else { return }
-            // Move one day per threshold, even on a fast flick, so it's calm.
-            onStep(accumulated > 0 ? 1 : -1)
-            accumulated = 0
-        }
-
-        override func mouseDown(with event: NSEvent) {
-            // A simple click (not a drag) opens Calendar.
-            onClick()
-        }
     }
 }

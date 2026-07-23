@@ -133,6 +133,8 @@ final class AppModel {
                 guard let self else { return }
                 self.mediaKeyInterceptor?.setEnabled(self.settings.islandSystemHUD && self.settings.islandEnabled)
                 self.dockClickWatcher.setEnabled(self.settings.dockClickToHide)
+                // Pick up a calendar grant made while Luma was running.
+                if self.settings.islandShowCalendar { self.islandModel.calendar.refreshAccess() }
             }
         }
     }

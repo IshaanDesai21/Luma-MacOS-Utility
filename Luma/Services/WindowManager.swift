@@ -130,7 +130,19 @@ final class WindowManager {
     private func makeContainer(model: DynamicIslandModel) -> IslandContainerView {
         let container = IslandContainerView(frame: CGRect(origin: .zero, size: canvasSize))
         container.interactiveRect = { [weak self] in self?.islandRectInCanvas() ?? .zero }
-        container.onScroll = { [weak model] delta in model?.scrollVolume(by: delta) }
+        // Scroll routing: over the expanded card with the calendar shown, page
+        // through dates; over the resting pod, change the volume.
+        container.scrollMode = { [weak model] in
+            guard let model else { return .none }
+            if model.presentation == .expanded && model.settings.islandShowCalendar { return .calendar }
+            if model.presentation == .peek { return .volume }
+            return .none
+        }
+        container.onVolumeScroll = { [weak model] delta in model?.scrollVolume(by: delta) }
+        container.onCalendarStep = { [weak model] step in
+            guard let model else { return }
+            withAnimation(.smooth(duration: 0.34)) { model.calendar.shift(days: step) }
+        }
 
         let root = DynamicIslandView()
             .environment(model)
@@ -357,8 +369,16 @@ private final class IslandPanel: NSPanel {
 /// the invisible parts of the big fixed window never block the menu bar or
 /// anything behind them.
 final class IslandContainerView: NSView {
+    enum ScrollMode { case volume, calendar, none }
+
     var interactiveRect: () -> CGRect = { .zero }
-    var onScroll: ((CGFloat) -> Void)?
+    var scrollMode: () -> ScrollMode = { .none }
+    var onVolumeScroll: ((CGFloat) -> Void)?
+    var onCalendarStep: ((Int) -> Void)?
+
+    // Larger threshold = slower, one-day-at-a-time calendar paging.
+    private var calendarAccumulator: CGFloat = 0
+    private let pointsPerDay: CGFloat = 55
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         // `point` is in the superview's coordinate space.
@@ -368,7 +388,19 @@ final class IslandContainerView: NSView {
     }
 
     override func scrollWheel(with event: NSEvent) {
-        onScroll?(event.scrollingDeltaY)
-        super.scrollWheel(with: event)
+        switch scrollMode() {
+        case .volume:
+            onVolumeScroll?(event.scrollingDeltaY)
+        case .calendar:
+            let horizontal = abs(event.scrollingDeltaX) >= abs(event.scrollingDeltaY)
+            let delta = horizontal ? event.scrollingDeltaX : -event.scrollingDeltaY
+            calendarAccumulator += delta
+            if abs(calendarAccumulator) >= pointsPerDay {
+                onCalendarStep?(calendarAccumulator > 0 ? 1 : -1)
+                calendarAccumulator = 0
+            }
+        case .none:
+            break
+        }
     }
 }
