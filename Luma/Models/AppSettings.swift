@@ -68,9 +68,15 @@ final class AppSettings {
         didSet { defaults.set(islandHorizontalOffset, forKey: Keys.islandHorizontalOffset) }
     }
 
-    /// Overall island size multiplier.
+    /// Overall island size multiplier (the resting pod).
     var islandScale: Double {
         didSet { defaults.set(islandScale, forKey: Keys.islandScale) }
+    }
+
+    /// Extra multiplier applied only to the expanded card, so it can be smaller
+    /// (or larger) than the pod's size.
+    var islandExpandedScale: Double {
+        didSet { defaults.set(islandExpandedScale, forKey: Keys.islandExpandedScale) }
     }
 
     /// Size multiplier for the hover strip that opens the island (1 = default).
@@ -251,6 +257,7 @@ final class AppSettings {
         static let islandVerticalOffset = "island.verticalOffset"
         static let islandHorizontalOffset = "island.horizontalOffset"
         static let islandScale = "island.scale"
+        static let islandExpandedScale = "island.expandedScale"
         static let islandActivationArea = "island.activationArea"
         static let islandShowSensors = "island.showSensors"
         static let islandChargingIndicator = "island.chargingIndicator"
@@ -317,6 +324,8 @@ final class AppSettings {
         islandHorizontalOffset = defaults.double(forKey: Keys.islandHorizontalOffset)
         let storedScale = defaults.double(forKey: Keys.islandScale)
         islandScale = storedScale == 0 ? 1.0 : storedScale
+        let storedExpanded = defaults.double(forKey: Keys.islandExpandedScale)
+        islandExpandedScale = storedExpanded == 0 ? 1.0 : storedExpanded
         let storedActivation = defaults.double(forKey: Keys.islandActivationArea)
         islandActivationArea = storedActivation == 0 ? 1.0 : storedActivation
         // Feature toggles default to on (except the idle clock).

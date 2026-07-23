@@ -114,14 +114,27 @@ struct DynamicIslandPageView: View {
                 }
             }
             VStack(alignment: .leading, spacing: 4) {
-                LabeledContent("Size", value: "\(Int(settings.islandScale * 100))%")
+                LabeledContent("Pod size", value: "\(Int(settings.islandScale * 100))%")
                 Slider(value: $settings.islandScale, in: 0.8...1.4) {
-                    Text("Size")
+                    Text("Pod size")
                 } minimumValueLabel: {
                     Image(systemName: "minus").font(.caption2).foregroundStyle(.secondary)
                 } maximumValueLabel: {
                     Image(systemName: "plus").font(.caption2).foregroundStyle(.secondary)
                 }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                LabeledContent("Expanded size", value: "\(Int(settings.islandExpandedScale * 100))%")
+                Slider(value: $settings.islandExpandedScale, in: 0.7...1.3) {
+                    Text("Expanded size")
+                } minimumValueLabel: {
+                    Image(systemName: "minus").font(.caption2).foregroundStyle(.secondary)
+                } maximumValueLabel: {
+                    Image(systemName: "plus").font(.caption2).foregroundStyle(.secondary)
+                }
+                Text("Sizes the dropped-down card separately from the resting pod.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
             }
             VStack(alignment: .leading, spacing: 4) {
                 LabeledContent("Artwork glow", value: settings.islandGlowAmount < 0.02 ? "Off" : "\(Int(settings.islandGlowAmount * 100))%")
@@ -332,21 +345,27 @@ struct DynamicIslandPageView: View {
     }
 
     private func featureRow(icon: String, title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
-        Toggle(isOn: isOn) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 14))
+        // Explicit row layout (icon + text left, switch right) so every row
+        // lines up — a Toggle's own label sizes to its content and staggers.
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 13))
+                Text(subtitle)
+                    .font(.system(size: 10))
                     .foregroundStyle(.secondary)
-                    .frame(width: 24)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .font(.system(size: 13))
-                    Text(subtitle)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                }
             }
+            Spacer(minLength: 12)
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
     }

@@ -21,6 +21,9 @@ struct DynamicIslandView: View {
     @State private var pulsing = false
     @State private var glowColor: Color?
 
+    /// The album-art accent color (vivid), or the app accent when unknown.
+    private var albumColor: Color { glowColor ?? .accentColor }
+
     private var presentation: DynamicIslandModel.Presentation {
         forcedPresentation ?? model.presentation
     }
@@ -147,8 +150,16 @@ struct DynamicIslandView: View {
     private var contentLayers: some View {
         ZStack {
             // In notch style the resting tab is an empty black notch (nothing to
-            // show — the physical notch sits over it).
-            if !model.isNotchStyle {
+            // show — the physical notch sits over it). When music plays we flank
+            // the notch with album art (left) and a visualizer (right).
+            if model.isNotchStyle {
+                notchPeekContent
+                    .frame(
+                        width: model.layout(for: .peek).width,
+                        height: model.layout(for: .peek).height
+                    )
+                    .opacity(presentation == .peek ? 1 : 0)
+            } else {
                 peekContent
                     .frame(
                         width: model.layout(for: .peek).width,
@@ -193,6 +204,32 @@ struct DynamicIslandView: View {
         .padding(.horizontal, 18)
     }
 
+    // MARK: - Notch peek (art flanks the notch)
+
+    @ViewBuilder
+    private var notchPeekContent: some View {
+        if player.track != nil {
+            HStack(spacing: 0) {
+                artwork(size: 26, radius: 6)
+                    .padding(.leading, 12)
+                // The physical notch occupies the middle.
+                Spacer(minLength: model.notchSize.width)
+                if settings.islandVisualizer, player.track?.isPlaying == true {
+                    VisualizerBars(color: albumColor)
+                        .padding(.trailing, 14)
+                } else {
+                    Image(systemName: "music.note")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(albumColor)
+                        .padding(.trailing, 16)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            Color.clear
+        }
+    }
+
     // MARK: - Peek (resting pod)
 
     private var peekContent: some View {
@@ -205,7 +242,7 @@ struct DynamicIslandView: View {
             } else if player.track != nil {
                 artwork(size: 22, radius: 6)
                 if settings.islandVisualizer, player.track?.isPlaying == true {
-                    VisualizerBars()
+                    VisualizerBars(color: albumColor)
                 } else {
                     Image(systemName: "waveform")
                         .font(.system(size: 12, weight: .semibold))
@@ -381,8 +418,18 @@ struct DynamicIslandView: View {
     }
 
     private var mediaColumn: some View {
-        HStack(spacing: 12) {
-            artwork(size: 62, radius: 12)
+        HStack(spacing: 14) {
+            artwork(size: 64, radius: 13)
+                // The album color seeps into the island around the cover.
+                .background {
+                    if player.track != nil {
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .fill(albumColor)
+                            .blur(radius: 26)
+                            .opacity(0.75)
+                            .scaleEffect(1.35)
+                    }
+                }
                 .overlay(alignment: .bottomTrailing) {
                     if let badge = player.sourceBadge() {
                         Image(nsImage: badge)
@@ -401,6 +448,7 @@ struct DynamicIslandView: View {
                     SeekBar(
                         progress: player.track?.progress ?? 0,
                         duration: player.track?.duration ?? 0,
+                        tint: albumColor,
                         onSeek: { player.seek(to: $0) }
                     )
                     .frame(height: 12)
@@ -429,11 +477,14 @@ struct DynamicIslandView: View {
         .overlay {
             if model.calendar.access == .granted {
                 CalendarScrollCatcher(
-                    onStep: { step in model.calendar.shift(days: step) },
+                    onStep: { step in
+                        withAnimation(.easeInOut(duration: 0.28)) { model.calendar.shift(days: step) }
+                    },
                     onClick: { model.calendar.openCalendarApp() }
                 )
             }
         }
+        .animation(.easeInOut(duration: 0.28), value: model.calendar.focusedDate)
     }
 
     private var weekStrip: some View {
@@ -472,8 +523,11 @@ struct DynamicIslandView: View {
             }
         } else {
             // When there are no events, show nothing at all (just the week strip).
+            let events = model.calendar.todaysEvents
+            let shown = events.prefix(3)
+            let extra = events.count - shown.count
             VStack(alignment: .leading, spacing: 5) {
-                ForEach(model.calendar.todaysEvents) { event in
+                ForEach(shown) { event in
                     HStack(spacing: 7) {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(Color(nsColor: event.calendarColor))
@@ -486,6 +540,12 @@ struct DynamicIslandView: View {
                         }
                         Spacer(minLength: 0)
                     }
+                }
+                if extra > 0 {
+                    Text("+\(extra) more")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 10)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -595,15 +655,16 @@ struct DynamicIslandView: View {
     // MARK: - Visualizer
 
     /// Little animated equalizer bars for the pod — smooth, deterministic
-    /// sine-driven motion (no audio tap needed).
+    /// sine-driven motion (no audio tap needed), tinted from the album art.
     private struct VisualizerBars: View {
+        var color: Color = .secondary
         var body: some View {
             TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { context in
                 let t = context.date.timeIntervalSinceReferenceDate
                 HStack(spacing: 2.5) {
                     ForEach(0..<4, id: \.self) { index in
                         Capsule()
-                            .fill(.secondary)
+                            .fill(color)
                             .frame(width: 2.5, height: height(index: index, time: t))
                     }
                 }
@@ -676,8 +737,15 @@ struct DynamicIslandView: View {
         source.draw(in: NSRect(x: 0, y: 0, width: 1, height: 1))
         NSGraphicsContext.restoreGraphicsState()
 
-        guard let averaged = tiny.colorAt(x: 0, y: 0) else { return nil }
-        return Color(nsColor: averaged)
+        guard let averaged = tiny.colorAt(x: 0, y: 0)?.usingColorSpace(.deviceRGB) else { return nil }
+        // Boost saturation/brightness so the accent is vivid, not muddy.
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        averaged.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        let vivid = NSColor(hue: h,
+                            saturation: min(1, s * 1.7),
+                            brightness: min(1, max(0.62, b)),
+                            alpha: 1)
+        return Color(nsColor: vivid)
     }
 }
 
@@ -704,7 +772,8 @@ private struct CalendarScrollCatcher: NSViewRepresentable {
         var onStep: (Int) -> Void = { _ in }
         var onClick: () -> Void = {}
         private var accumulated: CGFloat = 0
-        private let pointsPerDay: CGFloat = 14
+        // Larger threshold = slower, more deliberate day-by-day paging.
+        private let pointsPerDay: CGFloat = 55
 
         override func scrollWheel(with event: NSEvent) {
             // Use whichever axis the user moved more; both page through dates.
@@ -712,9 +781,9 @@ private struct CalendarScrollCatcher: NSViewRepresentable {
             let delta = horizontal ? event.scrollingDeltaX : -event.scrollingDeltaY
             accumulated += delta
             guard abs(accumulated) >= pointsPerDay else { return }
-            let steps = Int((accumulated / pointsPerDay).rounded(.towardZero))
-            accumulated -= CGFloat(steps) * pointsPerDay
-            if steps != 0 { onStep(steps) }
+            // Move one day per threshold, even on a fast flick, so it's calm.
+            onStep(accumulated > 0 ? 1 : -1)
+            accumulated = 0
         }
 
         override func mouseDown(with event: NSEvent) {

@@ -12,30 +12,23 @@ extension View {
 }
 
 /// The layered glass backing, driven by one continuous knob:
-/// - at the low end the glass base itself fades toward pure transparency, so
-///   fully "liquid" is barely-there water with just refraction hints,
-/// - the clear glass variant is used through the lower half,
-/// - a milky frost scrim fades in continuously on top, so the far end reads as
-///   properly frosted. Every position of the slider looks distinct.
+/// - the base is ALWAYS real Liquid Glass (transparent + blurred/refractive),
+///   so the liquid end looks like Apple's clear glass panels — you see through
+///   it, not a dark fill,
+/// - a milky frost scrim fades in on top as the level rises, so the far end
+///   reads as properly frosted. Every position looks distinct and glassy.
 struct LiquidGlassSurface<S: Shape>: View {
     let shape: S
     let level: Double
 
     private var clamped: Double { min(max(level, 0), 1) }
 
-    /// Below 0.35 the whole glass layer fades out, down to 12% at fully liquid.
-    private var baseOpacity: Double {
-        clamped >= 0.35 ? 1 : 0.12 + (clamped / 0.35) * 0.88
-    }
-
-    /// Frost only begins past the lower quarter; up to 0.45 white at the top.
-    private var frostOpacity: Double {
-        max(0, clamped - 0.25) / 0.75 * 0.45
-    }
+    /// Frost grows from 0 (pure clear glass) to ~0.5 (milky frosted).
+    private var frostOpacity: Double { clamped * 0.5 }
 
     var body: some View {
         ZStack {
-            glassBase.opacity(baseOpacity)
+            glassBase
             shape.fill(.white.opacity(frostOpacity))
         }
     }
@@ -43,8 +36,13 @@ struct LiquidGlassSurface<S: Shape>: View {
     @ViewBuilder
     private var glassBase: some View {
         if #available(macOS 26.0, *) {
+            // Real Apple Liquid Glass at full strength: clear (very glassy) for
+            // the liquid half, regular for the frosted half. Never faded, so it
+            // stays transparent/refractive instead of turning into a flat tint.
             Color.clear.glassEffect(clamped < 0.5 ? .clear : .regular, in: shape)
         } else {
+            // macOS 15 fallback: a thin translucent material at the liquid end,
+            // thickening toward frosted.
             shape.fill(.clear).background(fallbackMaterial, in: shape)
         }
     }
@@ -52,8 +50,8 @@ struct LiquidGlassSurface<S: Shape>: View {
     private var fallbackMaterial: Material {
         switch clamped {
         case ..<0.35: return .ultraThinMaterial
-        case ..<0.55: return .thinMaterial
-        case ..<0.75: return .regularMaterial
+        case ..<0.6: return .thinMaterial
+        case ..<0.8: return .regularMaterial
         default: return .thickMaterial
         }
     }

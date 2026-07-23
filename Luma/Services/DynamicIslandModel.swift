@@ -189,7 +189,10 @@ final class DynamicIslandModel {
 
     func layout(for presentation: Presentation) -> IslandLayout {
         let scale = CGFloat(settings.islandScale)
-        if isNotchStyle { return notchLayout(for: presentation, scale: scale) }
+        // The expanded card gets its own extra multiplier so it can be sized
+        // independently of the resting pod.
+        let expandedScale = scale * CGFloat(settings.islandExpandedScale)
+        if isNotchStyle { return notchLayout(for: presentation, scale: scale, expandedScale: expandedScale) }
 
         switch presentation {
         case .peek:
@@ -203,7 +206,7 @@ final class DynamicIslandModel {
             return IslandLayout(width: 240 * scale, height: height, cornerRadius: height / 2)
         case .expanded:
             let size = expandedContentSize()
-            return IslandLayout(width: size.width * scale, height: size.height * scale, cornerRadius: 30 * scale)
+            return IslandLayout(width: size.width * expandedScale, height: size.height * expandedScale, cornerRadius: 30 * expandedScale)
         }
     }
 
@@ -223,18 +226,23 @@ final class DynamicIslandModel {
     /// boringNotch-style geometry: at rest the tab matches the physical notch
     /// exactly (so it disappears into it); everything grows downward from a flat
     /// top with rounded bottom corners.
-    private func notchLayout(for presentation: Presentation, scale: CGFloat) -> IslandLayout {
+    private func notchLayout(for presentation: Presentation, scale: CGFloat, expandedScale: CGFloat) -> IslandLayout {
         let nW = notchSize.width > 0 ? notchSize.width : 200
         let nH = notchSize.height > 0 ? notchSize.height : 34
         switch presentation {
         case .peek:
+            if player.track != nil {
+                // Flank the physical notch: album art on the left, visualizer on
+                // the right, notch gap in the middle.
+                return IslandLayout(width: nW + 116, height: max(nH, 34), cornerRadius: 12)
+            }
             // Exactly the notch — never scaled — so it blends seamlessly.
             return IslandLayout(width: nW, height: nH, cornerRadius: 8)
         case .hud:
             return IslandLayout(width: max(nW + 150, 300) * scale, height: nH + 26, cornerRadius: 20)
         case .expanded:
             let size = expandedContentSize()
-            return IslandLayout(width: max(nW + 200, size.width) * scale, height: nH + size.height * scale, cornerRadius: 24)
+            return IslandLayout(width: max(nW + 200, size.width) * expandedScale, height: nH + size.height * expandedScale, cornerRadius: 24)
         }
     }
 

@@ -116,7 +116,7 @@ final class CalendarService {
             // On today, hide events that already finished; on other days show all.
             .filter { focusedIsToday && !$0.isAllDay ? $0.endDate > Date() : true }
             .sorted { ($0.startDate ?? .distantPast) < ($1.startDate ?? .distantPast) }
-            .prefix(4)
+            .prefix(12)
             .map {
                 Event(
                     id: $0.eventIdentifier ?? UUID().uuidString,
